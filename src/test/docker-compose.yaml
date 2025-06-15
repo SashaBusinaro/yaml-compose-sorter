@@ -1,29 +1,33 @@
-version: '3.8'
 services:
   web:
-    container_name: my-nginx
+    networks:
+      - frontend
+    ports:
+      - "80:80"
+      - "8081:8080"
+      - "90:40"
     image: nginx:latest
+    container_name: my-nginx
+    volumes:
+      - ./html:/usr/share/nginx/html
     restart: always
     depends_on:
       - app
-    ports:
-      - '80:80'
-    volumes:
-      - ./html:/usr/share/nginx/html
-    networks:
-      - frontend
+      
   app:
-    container_name: my-app
+    environment:
+      NODE_ENV: production
     build:
       context: .
       dockerfile: Dockerfile
+    container_name: my-app
     restart: unless-stopped
     expose:
-      - '3000'
-    environment:
-      NODE_ENV: production
-volumes:
-  data: null
+      - "3000"
+
 networks:
   frontend:
     driver: bridge
+version: "3.8"
+volumes:
+  data:

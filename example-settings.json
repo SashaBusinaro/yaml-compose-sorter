@@ -23,5 +23,8 @@
     "networks",
     "labels",
     "healthcheck"
-  ]
+  ],
+  "yaml-compose-sorter.addDocumentSeparator": false,
+  "yaml-compose-sorter.addBlankLinesBetweenTopLevelKeys": true,
+  "yaml-compose-sorter.removeVersionKey": false
 }

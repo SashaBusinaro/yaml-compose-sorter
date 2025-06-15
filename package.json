@@ -2,7 +2,7 @@
   "name": "yaml-compose-sorter",
   "displayName": "YAML Compose Sorter",
   "description": "Sort and format Docker Compose YAML files in a consistent way",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "engines": {
     "vscode": "^1.101.0"
   },
@@ -69,6 +69,21 @@
             "healthcheck"
           ],
           "description": "Order of keys within each service definition"
+        },
+        "yaml-compose-sorter.addDocumentSeparator": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically add '---' document separator at the beginning of YAML files"
+        },
+        "yaml-compose-sorter.addBlankLinesBetweenTopLevelKeys": {
+          "type": "boolean",
+          "default": true,
+          "description": "Add blank lines between top-level keys for better readability"
+        },
+        "yaml-compose-sorter.removeVersionKey": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically remove the 'version' key from Docker Compose files"
         }
       }
     }

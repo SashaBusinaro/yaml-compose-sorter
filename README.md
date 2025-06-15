@@ -7,7 +7,22 @@ A Visual Studio Code extension that automatically sorts and formats Docker Compo
 - **Automatic sorting on save**: Sorts Docker Compose files automatically when you save them
 - **Manual sorting command**: Sort files on demand using the command palette
 - **Configurable key order**: Customize the order of top-level and service-level keys
-- **Smart file detection**: Only processes files that are actually Docker Compose files
+- **Smart file detection**: Processes Docker Compose files with various naming patterns
+- **Document separator**: Optionally adds `---` at the beginning of YAML files
+- **Improved readability**: Adds blank lines between top-level keys for better visual separation
+- **Version key removal**: Optionally removes the deprecated `version` key from Docker Compose files
+
+## Supported File Patterns
+
+The extension automatically detects and processes the following Docker Compose file patterns:
+- `docker-compose.yaml`
+- `docker-compose.yml`
+- `compose.yaml`
+- `compose.yml` 
+- `docker-compose.*.yaml`
+- `docker-compose.*.yml`
+- `compose.*.yaml`
+- `compose.*.yml`
 
 ## Key Ordering
 
@@ -43,7 +58,7 @@ Any keys not in the configured order will be placed at the end in alphabetical o
 The extension automatically sorts Docker Compose files when you save them (if `sortOnSave` is enabled in settings).
 
 ### Manual Sorting
-1. Open a Docker Compose file (`docker-compose.yaml`, `docker-compose.yml`, etc.)
+1. Open a Docker Compose file (`docker-compose.yaml`, `docker-compose.yml`, `compose.yaml`, `compose.yml`, etc.)
 2. Open the Command Palette (`Cmd+Shift+P` on Mac, `Ctrl+Shift+P` on Windows/Linux)
 3. Type "Sort Docker Compose YAML" and press Enter
 
@@ -54,6 +69,9 @@ You can customize the extension behavior in VS Code settings:
 - `yaml-compose-sorter.sortOnSave`: Enable/disable automatic sorting on save (default: `true`)
 - `yaml-compose-sorter.topLevelKeyOrder`: Array of top-level key names in desired order
 - `yaml-compose-sorter.serviceKeyOrder`: Array of service-level key names in desired order
+- `yaml-compose-sorter.addDocumentSeparator`: Add `---` document separator at the beginning (default: `false`)
+- `yaml-compose-sorter.addBlankLinesBetweenTopLevelKeys`: Add blank lines between top-level keys for readability (default: `true`)
+- `yaml-compose-sorter.removeVersionKey`: Automatically remove the `version` key from files (default: `false`)
 
 ## Requirements
 
@@ -67,9 +85,14 @@ You can customize the extension behavior in VS Code settings:
 
 ## Release Notes
 
-### 0.0.1
+### 0.1.0
 
-Initial release with basic sorting functionality:
+Enhanced release with new formatting features:
+- **Extended file support**: Support for `compose.yml` and `compose.yaml` files
+- **Document separator**: Optionally add `---` at the beginning of YAML files
+- **Improved readability**: Add blank lines between top-level keys for better visual separation
+- **Version key removal**: Optionally remove the `version` key from Docker Compose files
+- **Enhanced file detection**: Support for additional Docker Compose file naming patterns
 - Sort top-level keys in Docker Compose files
 - Sort service-level keys within each service
 - Configurable key ordering

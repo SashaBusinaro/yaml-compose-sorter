@@ -12,6 +12,9 @@ interface ExtensionConfig {
 	sortOnSave: boolean;
 	topLevelKeyOrder: string[];
 	serviceKeyOrder: string[];
+	addDocumentSeparator: boolean;
+	addBlankLinesBetweenTopLevelKeys: boolean;
+	removeVersionKey: boolean;
 }
 
 // This method is called when your extension is activated
@@ -56,7 +59,10 @@ function getExtensionConfig(): ExtensionConfig {
 	return {
 		sortOnSave: config.get('sortOnSave', true),
 		topLevelKeyOrder: config.get('topLevelKeyOrder', ['version', 'name', 'services', 'volumes', 'networks', 'configs', 'secrets']),
-		serviceKeyOrder: config.get('serviceKeyOrder', ['container_name', 'image', 'build', 'restart', 'depends_on', 'ports', 'expose', 'volumes', 'environment', 'env_file', 'networks', 'labels', 'healthcheck'])
+		serviceKeyOrder: config.get('serviceKeyOrder', ['container_name', 'image', 'build', 'restart', 'depends_on', 'ports', 'expose', 'volumes', 'environment', 'env_file', 'networks', 'labels', 'healthcheck']),
+		addDocumentSeparator: config.get('addDocumentSeparator', false),
+		addBlankLinesBetweenTopLevelKeys: config.get('addBlankLinesBetweenTopLevelKeys', true),
+		removeVersionKey: config.get('removeVersionKey', false)
 	};
 }
 
@@ -64,7 +70,10 @@ function isDockerComposeFile(document: vscode.TextDocument): boolean {
 	const fileName = path.basename(document.fileName).toLowerCase();
 	return fileName === 'docker-compose.yml' || 
 		   fileName === 'docker-compose.yaml' ||
-		   fileName.startsWith('docker-compose.') && (fileName.endsWith('.yml') || fileName.endsWith('.yaml'));
+		   fileName === 'compose.yml' ||
+		   fileName === 'compose.yaml' ||
+		   fileName.startsWith('docker-compose.') && (fileName.endsWith('.yml') || fileName.endsWith('.yaml')) ||
+		   fileName.startsWith('compose.') && (fileName.endsWith('.yml') || fileName.endsWith('.yaml'));
 }
 
 async function sortDockerComposeFile(editor: vscode.TextEditor): Promise<void> {
@@ -129,8 +138,14 @@ function sortYamlContent(yamlText: string): string {
 			return yamlText;
 		}
 
+		// Remove version key if configured
+		let workingDoc = { ...doc };
+		if (config.removeVersionKey && 'version' in workingDoc) {
+			delete workingDoc.version;
+		}
+
 		// Sort top-level keys
-		const sortedDoc = sortObjectKeys(doc, config.topLevelKeyOrder);
+		const sortedDoc = sortObjectKeys(workingDoc, config.topLevelKeyOrder);
 		
 		// Sort service-level keys if services exist
 		if (sortedDoc.services && typeof sortedDoc.services === 'object') {
@@ -145,12 +160,24 @@ function sortYamlContent(yamlText: string): string {
 		}
 
 		// Convert back to YAML with proper formatting
-		return yaml.dump(sortedDoc, {
+		let yamlOutput = yaml.dump(sortedDoc, {
 			indent: 2,
 			lineWidth: -1,
 			noRefs: true,
 			sortKeys: false // We handle sorting manually
 		});
+
+		// Add blank lines between top-level keys if configured
+		if (config.addBlankLinesBetweenTopLevelKeys) {
+			yamlOutput = addBlankLinesBetweenTopLevelKeys(yamlOutput);
+		}
+
+		// Add document separator if configured and not already present
+		if (config.addDocumentSeparator && !yamlOutput.startsWith('---')) {
+			yamlOutput = '---\n' + yamlOutput;
+		}
+
+		return yamlOutput;
 		
 	} catch (error) {
 		console.error('Error parsing YAML:', error);
@@ -183,6 +210,41 @@ function sortObjectKeys(obj: any, keyOrder: string[]): any {
 	}
 	
 	return sortedObj;
+}
+
+function addBlankLinesBetweenTopLevelKeys(yamlContent: string): string {
+	const lines = yamlContent.split('\n');
+	const result: string[] = [];
+	let hasSeenTopLevelKey = false;
+	
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i];
+		const trimmedLine = line.trim();
+		
+		// Check if this is a top-level key (starts at column 0, ends with colon, not empty)
+		const isTopLevelKey = line.length > 0 && 
+							  line[0] !== ' ' && 
+							  line[0] !== '\t' && 
+							  trimmedLine.endsWith(':') && 
+							  !trimmedLine.startsWith('#') &&
+							  !trimmedLine.startsWith('---');
+		
+		// Add blank line before top-level keys (except the first one)
+		if (isTopLevelKey && hasSeenTopLevelKey) {
+			// Only add blank line if the previous line is not already blank
+			if (result.length > 0 && result[result.length - 1].trim() !== '') {
+				result.push('');
+			}
+		}
+		
+		result.push(line);
+		
+		if (isTopLevelKey) {
+			hasSeenTopLevelKey = true;
+		}
+	}
+	
+	return result.join('\n');
 }
 
 // This method is called when your extension is deactivated
