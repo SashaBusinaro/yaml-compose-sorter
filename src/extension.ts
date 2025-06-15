@@ -249,3 +249,6 @@ function addBlankLinesBetweenTopLevelKeys(yamlContent: string): string {
 
 // This method is called when your extension is deactivated
 export function deactivate() {}
+
+// Export functions for testing
+export { isDockerComposeFile, sortObjectKeys, sortYamlContent, addBlankLinesBetweenTopLevelKeys };

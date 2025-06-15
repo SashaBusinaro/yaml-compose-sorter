@@ -1,5 +1,6 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
+import { isDockerComposeFile, sortObjectKeys, sortYamlContent, addBlankLinesBetweenTopLevelKeys } from "../../extension";
 
 suite("Extension Test Suite", () => {
   vscode.window.showInformationMessage("Start all tests.");
@@ -257,21 +258,7 @@ suite("Extension Test Suite", () => {
   });
 });
 
-// Helper functions for testing
-function isDockerComposeFile(document: any): boolean {
-  const fileName = document.fileName.split("/").pop()?.toLowerCase() || "";
-  return (
-    fileName === "docker-compose.yml" ||
-    fileName === "docker-compose.yaml" ||
-    fileName === "compose.yml" ||
-    fileName === "compose.yaml" ||
-    (fileName.startsWith("docker-compose.") &&
-      (fileName.endsWith(".yml") || fileName.endsWith(".yaml"))) ||
-    (fileName.startsWith("compose.") &&
-      (fileName.endsWith(".yml") || fileName.endsWith(".yaml")))
-  );
-}
-
+// Helper functions for testing (functions not exported from extension)
 function addDocumentSeparatorIfNeeded(
   yamlContent: string,
   addSeparator: boolean
@@ -292,65 +279,4 @@ function removeVersionKeyIfConfigured(obj: any, removeVersion: boolean): any {
     delete result.version;
   }
   return result;
-}
-
-// Helper function for testing (duplicate from extension.ts for testing)
-function sortObjectKeys(obj: any, keyOrder: string[]): any {
-  if (!obj || typeof obj !== "object" || Array.isArray(obj)) {
-    return obj;
-  }
-
-  const sortedObj: any = {};
-  const objKeys = Object.keys(obj);
-
-  // First, add keys in the specified order
-  for (const key of keyOrder) {
-    if (objKeys.includes(key)) {
-      sortedObj[key] = obj[key];
-    }
-  }
-
-  // Then add any remaining keys in alphabetical order
-  const remainingKeys = objKeys.filter((key) => !keyOrder.includes(key)).sort();
-
-  for (const key of remainingKeys) {
-    sortedObj[key] = obj[key];
-  }
-
-  return sortedObj;
-}
-
-function addBlankLinesBetweenTopLevelKeys(yamlContent: string): string {
-  const lines = yamlContent.split('\n');
-  const result: string[] = [];
-  let hasSeenTopLevelKey = false;
-  
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const trimmedLine = line.trim();
-    
-    // Check if this is a top-level key (starts at column 0, ends with colon, not empty)
-    const isTopLevelKey = line.length > 0 && 
-                          line[0] !== ' ' && 
-                          line[0] !== '\t' && 
-                          trimmedLine.endsWith(':') && 
-                          !trimmedLine.startsWith('#') &&
-                          !trimmedLine.startsWith('---');
-    
-    // Add blank line before top-level keys (except the first one)
-    if (isTopLevelKey && hasSeenTopLevelKey) {
-      // Only add blank line if the previous line is not already blank
-      if (result.length > 0 && result[result.length - 1].trim() !== '') {
-        result.push('');
-      }
-    }
-    
-    result.push(line);
-    
-    if (isTopLevelKey) {
-      hasSeenTopLevelKey = true;
-    }
-  }
-  
-  return result.join('\n');
 }

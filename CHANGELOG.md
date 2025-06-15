@@ -5,6 +5,22 @@ All notable changes to the "yaml-compose-sorter" extension will be documented in
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2025-01-21
+
+### Fixed
+- **Test infrastructure**: Added comprehensive test suite with proper VS Code extension testing framework
+- **Extension compliance**: Improved code structure and exported functions for better testability
+- **Build configuration**: Enhanced debug and test configurations for development
+- **Documentation**: Updated README with improved installation and configuration instructions
+- **Packaging**: Ensured proper license compliance and VSIX package structure
+
+### Technical Improvements
+- Added `.vscode/launch.json` for extension debugging
+- Implemented proper test runner with `.vscode-test.mjs`
+- Enhanced test coverage with `extension.test.ts`
+- Updated `.gitignore` to exclude platform-specific files
+- Improved code exports for testing compatibility
+
 ## [0.1.0] - 2025-06-15
 
 ### Added

@@ -1,10 +1,16 @@
 {
   "name": "yaml-compose-sorter",
   "displayName": "YAML Compose Sorter",
-  "description": "Sort and format Docker Compose YAML files in a consistent way",
-  "version": "0.1.0",
+  "description": "Sort Docker Compose YAML files in a consistent way",
+	"version": "0.1.1",
   "engines": {
     "vscode": "^1.101.0"
+  },
+  "license": "MIT",
+  "publisher": "SashaBusinaro",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SashaBusinaro/yaml-compose-sorter"
   },
   "keywords": [
     "docker",
@@ -105,6 +111,7 @@
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.5.2",
     "eslint": "^9.25.1",
+    "glob": "^11.0.3",
     "typescript": "^5.8.3"
   },
   "dependencies": {

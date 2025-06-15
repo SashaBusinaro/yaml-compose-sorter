@@ -24,34 +24,6 @@ The extension automatically detects and processes the following Docker Compose f
 - `compose.*.yaml`
 - `compose.*.yml`
 
-## Key Ordering
-
-### Top-level keys (default order):
-1. `version`
-2. `name` 
-3. `services`
-4. `volumes`
-5. `networks`
-6. `configs`
-7. `secrets`
-
-### Service-level keys (default order):
-1. `container_name`
-2. `image`
-3. `build`
-4. `restart`
-5. `depends_on`
-6. `ports`
-7. `expose`
-8. `volumes`
-9. `environment`
-10. `env_file`
-11. `networks`
-12. `labels`
-13. `healthcheck`
-
-Any keys not in the configured order will be placed at the end in alphabetical order.
-
 ## Usage
 
 ### Automatic Sorting
@@ -64,14 +36,22 @@ The extension automatically sorts Docker Compose files when you save them (if `s
 
 ## Configuration
 
+## Configuration
+
 You can customize the extension behavior in VS Code settings:
 
-- `yaml-compose-sorter.sortOnSave`: Enable/disable automatic sorting on save (default: `true`)
-- `yaml-compose-sorter.topLevelKeyOrder`: Array of top-level key names in desired order
-- `yaml-compose-sorter.serviceKeyOrder`: Array of service-level key names in desired order
-- `yaml-compose-sorter.addDocumentSeparator`: Add `---` document separator at the beginning (default: `false`)
-- `yaml-compose-sorter.addBlankLinesBetweenTopLevelKeys`: Add blank lines between top-level keys for readability (default: `true`)
-- `yaml-compose-sorter.removeVersionKey`: Automatically remove the `version` key from files (default: `false`)
+| Setting                                      | Description                                                                                  | Default Value |
+|----------------------------------------------|----------------------------------------------------------------------------------------------|---------------|
+| `yaml-compose-sorter.sortOnSave`             | Enable or disable automatic sorting on save                                                  | `true`        |
+| `yaml-compose-sorter.topLevelKeyOrder`       | Array of top-level key names in the desired order                                            | `[version, name, services, volumes, networks, configs, secrets]` |
+| `yaml-compose-sorter.serviceKeyOrder`        | Array of service-level key names in the desired order                                        | `[container_name, image, build, restart, depends_on, ports, expose, volumes, environment, env_file, networks, labels, healthcheck]` |
+| `yaml-compose-sorter.addDocumentSeparator`   | Add `---` document separator at the beginning of YAML files                                 | `false`       |
+| `yaml-compose-sorter.addBlankLinesBetweenTopLevelKeys` | Add blank lines between top-level keys for improved readability                              | `true`        |
+| `yaml-compose-sorter.removeVersionKey`       | Automatically remove the deprecated `version` key from Docker Compose files                 | `false`       |
+
+### Example Configuration
+
+You can see an example configuration in the file `example-settings.json` included in the project.
 
 ## Requirements
 
@@ -82,18 +62,3 @@ You can customize the extension behavior in VS Code settings:
 
 - Comments in YAML files may be lost during sorting (this is a limitation of the YAML parser)
 - Complex YAML features like anchors and aliases are not preserved
-
-## Release Notes
-
-### 0.1.0
-
-Enhanced release with new formatting features:
-- **Extended file support**: Support for `compose.yml` and `compose.yaml` files
-- **Document separator**: Optionally add `---` at the beginning of YAML files
-- **Improved readability**: Add blank lines between top-level keys for better visual separation
-- **Version key removal**: Optionally remove the `version` key from Docker Compose files
-- **Enhanced file detection**: Support for additional Docker Compose file naming patterns
-- Sort top-level keys in Docker Compose files
-- Sort service-level keys within each service
-- Configurable key ordering
-- Automatic sorting on save
