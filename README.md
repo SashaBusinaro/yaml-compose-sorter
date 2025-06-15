@@ -36,8 +36,6 @@ The extension automatically sorts Docker Compose files when you save them (if `s
 
 ## Configuration
 
-## Configuration
-
 You can customize the extension behavior in VS Code settings:
 
 | Setting                                      | Description                                                                                  | Default Value |
