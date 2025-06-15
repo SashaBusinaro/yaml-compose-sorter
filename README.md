@@ -1,71 +1,76 @@
-# yaml-compose-sorter README
+# YAML Compose Sorter
 
-This is the README for your extension "yaml-compose-sorter". After writing up a brief description, we recommend including the following sections.
+A Visual Studio Code extension that automatically sorts and formats Docker Compose YAML files in a consistent way across projects.
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+- **Automatic sorting on save**: Sorts Docker Compose files automatically when you save them
+- **Manual sorting command**: Sort files on demand using the command palette
+- **Configurable key order**: Customize the order of top-level and service-level keys
+- **Smart file detection**: Only processes files that are actually Docker Compose files
 
-For example if there is an image subfolder under your extension project workspace:
+## Key Ordering
 
-\!\[feature X\]\(images/feature-x.png\)
+### Top-level keys (default order):
+1. `version`
+2. `name` 
+3. `services`
+4. `volumes`
+5. `networks`
+6. `configs`
+7. `secrets`
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+### Service-level keys (default order):
+1. `container_name`
+2. `image`
+3. `build`
+4. `restart`
+5. `depends_on`
+6. `ports`
+7. `expose`
+8. `volumes`
+9. `environment`
+10. `env_file`
+11. `networks`
+12. `labels`
+13. `healthcheck`
+
+Any keys not in the configured order will be placed at the end in alphabetical order.
+
+## Usage
+
+### Automatic Sorting
+The extension automatically sorts Docker Compose files when you save them (if `sortOnSave` is enabled in settings).
+
+### Manual Sorting
+1. Open a Docker Compose file (`docker-compose.yaml`, `docker-compose.yml`, etc.)
+2. Open the Command Palette (`Cmd+Shift+P` on Mac, `Ctrl+Shift+P` on Windows/Linux)
+3. Type "Sort Docker Compose YAML" and press Enter
+
+## Configuration
+
+You can customize the extension behavior in VS Code settings:
+
+- `yaml-compose-sorter.sortOnSave`: Enable/disable automatic sorting on save (default: `true`)
+- `yaml-compose-sorter.topLevelKeyOrder`: Array of top-level key names in desired order
+- `yaml-compose-sorter.serviceKeyOrder`: Array of service-level key names in desired order
 
 ## Requirements
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
-
-## Extension Settings
-
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
-For example:
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+- Visual Studio Code 1.101.0 or higher
+- Docker Compose YAML files must be valid YAML format
 
 ## Known Issues
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+- Comments in YAML files may be lost during sorting (this is a limitation of the YAML parser)
+- Complex YAML features like anchors and aliases are not preserved
 
 ## Release Notes
 
-Users appreciate release notes as you update your extension.
+### 0.0.1
 
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
-
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+Initial release with basic sorting functionality:
+- Sort top-level keys in Docker Compose files
+- Sort service-level keys within each service
+- Configurable key ordering
+- Automatic sorting on save

@@ -1,23 +1,77 @@
 {
   "name": "yaml-compose-sorter",
-  "displayName": "Compose Sorter",
-  "description": "",
+  "displayName": "YAML Compose Sorter",
+  "description": "Sort and format Docker Compose YAML files in a consistent way",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.101.0"
   },
+  "keywords": [
+    "docker",
+    "dockercompose",
+    "compose",
+    "yaml",
+    "yml",
+    "sorting",
+    "formatting"
+  ],
   "categories": [
+    "Formatters",
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onLanguage:yaml"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "yaml-compose-sorter.helloWorld",
-        "title": "Hello World"
+        "command": "yaml-compose-sorter.sortDockerCompose",
+        "title": "Sort Docker Compose YAML"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "YAML Compose Sorter",
+      "properties": {
+        "yaml-compose-sorter.sortOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically sort Docker Compose files on save"
+        },
+        "yaml-compose-sorter.topLevelKeyOrder": {
+          "type": "array",
+          "default": [
+            "version",
+            "name",
+            "services",
+            "volumes",
+            "networks",
+            "configs",
+            "secrets"
+          ],
+          "description": "Order of top-level keys in Docker Compose files"
+        },
+        "yaml-compose-sorter.serviceKeyOrder": {
+          "type": "array",
+          "default": [
+            "container_name",
+            "image",
+            "build",
+            "restart",
+            "depends_on",
+            "ports",
+            "expose",
+            "volumes",
+            "environment",
+            "env_file",
+            "networks",
+            "labels",
+            "healthcheck"
+          ],
+          "description": "Order of keys within each service definition"
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
@@ -28,14 +82,18 @@
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/vscode": "^1.101.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "20.x",
+    "@types/vscode": "^1.101.0",
     "@typescript-eslint/eslint-plugin": "^8.31.1",
     "@typescript-eslint/parser": "^8.31.1",
-    "eslint": "^9.25.1",
-    "typescript": "^5.8.3",
     "@vscode/test-cli": "^0.0.10",
-    "@vscode/test-electron": "^2.5.2"
+    "@vscode/test-electron": "^2.5.2",
+    "eslint": "^9.25.1",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "js-yaml": "^4.1.0"
   }
 }

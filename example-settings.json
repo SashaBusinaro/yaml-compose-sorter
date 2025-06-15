@@ -1,0 +1,27 @@
+{
+  "yaml-compose-sorter.sortOnSave": true,
+  "yaml-compose-sorter.topLevelKeyOrder": [
+    "version",
+    "name",
+    "services",
+    "volumes",
+    "networks",
+    "configs",
+    "secrets"
+  ],
+  "yaml-compose-sorter.serviceKeyOrder": [
+    "container_name",
+    "image",
+    "build",
+    "restart",
+    "depends_on",
+    "ports",
+    "expose",
+    "volumes",
+    "environment",
+    "env_file",
+    "networks",
+    "labels",
+    "healthcheck"
+  ]
+}
