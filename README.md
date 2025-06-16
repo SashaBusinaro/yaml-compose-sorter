@@ -2,6 +2,10 @@
 
 A Visual Studio Code extension that automatically sorts and formats Docker Compose YAML files in a consistent way across projects.
 
+## Preview
+
+![Preview](images/preview.gif)
+
 ## Features
 
 - **Automatic sorting on save**: Sorts Docker Compose files automatically when you save them
@@ -15,6 +19,7 @@ A Visual Studio Code extension that automatically sorts and formats Docker Compo
 ## Supported File Patterns
 
 The extension automatically detects and processes the following Docker Compose file patterns:
+
 - `docker-compose.yaml`
 - `docker-compose.yml`
 - `compose.yaml`
@@ -27,9 +32,11 @@ The extension automatically detects and processes the following Docker Compose f
 ## Usage
 
 ### Automatic Sorting
+
 The extension automatically sorts Docker Compose files when you save them (if `sortOnSave` is enabled in settings).
 
 ### Manual Sorting
+
 1. Open a Docker Compose file (`docker-compose.yaml`, `docker-compose.yml`, `compose.yaml`, `compose.yml`, etc.)
 2. Open the Command Palette (`Cmd+Shift+P` on Mac, `Ctrl+Shift+P` on Windows/Linux)
 3. Type "Sort Docker Compose YAML" and press Enter

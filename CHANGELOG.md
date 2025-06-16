@@ -1,9 +1,13 @@
 # Change Log
 
-All notable changes to the "yaml-compose-sorter" extension will be documented in this file.
-
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.1.4] - 2025-06-17
+
+### Docs
+
+- **Preview GIF**: Added a GIF showcasing the extension's functionality
 
 ## [0.1.3] - 2025-06-16
 
