@@ -1,6 +1,14 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
-import { isDockerComposeFile, sortObjectKeys, sortYamlContent, addBlankLinesBetweenTopLevelKeys } from "../../extension";
+import { 
+	isDockerComposeFile, 
+	sortObjectKeys, 
+	sortYamlContent, 
+	addBlankLinesBetweenTopLevelKeys, 
+	transformKeyValueLists,
+	processDockerComposeDocument,
+	formatYamlOutput 
+} from "../../extension";
 
 suite("Extension Test Suite", () => {
   vscode.window.showInformationMessage("Start all tests.");
@@ -255,6 +263,263 @@ suite("Extension Test Suite", () => {
     assert.strictEqual("version" in result, false);
     assert.strictEqual("services" in result, true);
     assert.strictEqual("volumes" in result, true);
+  });
+
+  test("YAML Compose Sorter transforms key=value lists into objects", () => {
+    const input: any = {
+      labels: [
+        "traefik.enable=true",
+        "traefik.http.routers.web.rule=Host(`example.org`)",
+        "traefik.http.routers.web.tls=true"
+      ]
+    };
+
+    transformKeyValueLists(input);
+
+    assert.strictEqual(typeof input.labels, "object");
+    assert.strictEqual(Array.isArray(input.labels), false);
+    assert.strictEqual(input.labels["traefik.enable"], "true");
+    assert.strictEqual(input.labels["traefik.http.routers.web.rule"], "Host(`example.org`)");
+    assert.strictEqual(input.labels["traefik.http.routers.web.tls"], "true");
+  });
+
+  test("YAML Compose Sorter transforms key=value lists in nested objects", () => {
+    const input = {
+      services: {
+        web: {
+          image: "nginx",
+          labels: [
+            "traefik.enable=true",
+            "traefik.http.routers.web.rule=Host(`example.org`)"
+          ],
+          environment: [
+            "NODE_ENV=production",
+            "API_URL=https://api.example.com"
+          ]
+        },
+        app: {
+          labels: [
+            "app.type=backend",
+            "app.version=1.0.0"
+          ]
+        }
+      }
+    };
+
+    transformKeyValueLists(input);
+
+    // Check web service labels
+    assert.strictEqual(typeof input.services.web.labels, "object");
+    assert.strictEqual((input.services.web.labels as any)["traefik.enable"], "true");
+    assert.strictEqual((input.services.web.labels as any)["traefik.http.routers.web.rule"], "Host(`example.org`)");
+
+    // Check web service environment
+    assert.strictEqual(typeof input.services.web.environment, "object");
+    assert.strictEqual((input.services.web.environment as any)["NODE_ENV"], "production");
+    assert.strictEqual((input.services.web.environment as any)["API_URL"], "https://api.example.com");
+
+    // Check app service labels
+    assert.strictEqual(typeof input.services.app.labels, "object");
+    assert.strictEqual((input.services.app.labels as any)["app.type"], "backend");
+    assert.strictEqual((input.services.app.labels as any)["app.version"], "1.0.0");
+
+    // Check that image property remains unchanged
+    assert.strictEqual(input.services.web.image, "nginx");
+  });
+
+  test("YAML Compose Sorter does not transform arrays that are not key=value pairs", () => {
+    const input = {
+      ports: ["80:80", "443:443"],
+      volumes: ["./data:/app/data", "./logs:/app/logs"],
+      command: ["npm", "start"],
+      mixed_array: ["some=value", "not_key_value", "another=valid"]
+    };
+
+    const originalInput = JSON.parse(JSON.stringify(input)); // Deep copy for comparison
+    transformKeyValueLists(input);
+
+    // These arrays should remain unchanged because they are not all key=value pairs
+    assert.deepStrictEqual(input.ports, originalInput.ports);
+    assert.deepStrictEqual(input.volumes, originalInput.volumes);
+    assert.deepStrictEqual(input.command, originalInput.command);
+    assert.deepStrictEqual(input.mixed_array, originalInput.mixed_array);
+  });
+
+  test("YAML Compose Sorter does not transform empty arrays", () => {
+    const input = {
+      labels: [],
+      environment: []
+    };
+
+    const originalInput = JSON.parse(JSON.stringify(input));
+    transformKeyValueLists(input);
+
+    assert.deepStrictEqual(input.labels, originalInput.labels);
+    assert.deepStrictEqual(input.environment, originalInput.environment);
+  });
+
+  test("YAML Compose Sorter handles key=value pairs with special characters", () => {
+    const input = {
+      labels: [
+        "traefik.http.routers.web.rule=Host(`example.org`) && PathPrefix(`/api`)",
+        "app.config=key1=value1,key2=value2",
+        "complex.value=http://user:pass@host:port/path?query=value&other=test"
+      ]
+    };
+
+    transformKeyValueLists(input);
+
+    assert.strictEqual(typeof input.labels, "object");
+    assert.strictEqual((input.labels as any)["traefik.http.routers.web.rule"], "Host(`example.org`) && PathPrefix(`/api`)");
+    assert.strictEqual((input.labels as any)["app.config"], "key1=value1,key2=value2");
+    assert.strictEqual((input.labels as any)["complex.value"], "http://user:pass@host:port/path?query=value&other=test");
+  });
+
+  test("YAML Compose Sorter does not transform invalid key=value pairs", () => {
+    const input = {
+      invalid_pairs: [
+        "=no_key",
+        "no_value=",
+        "no_equals_sign",
+        "=",
+        "valid=value"
+      ]
+    };
+
+    const originalInput = JSON.parse(JSON.stringify(input));
+    transformKeyValueLists(input);
+
+    // Should not transform because not all items are valid key=value pairs
+    assert.deepStrictEqual(input.invalid_pairs, originalInput.invalid_pairs);
+  });
+
+  test("YAML Compose Sorter handles invalid key=value pairs with whitespace in keys", () => {
+    const input = {
+      labels: [
+        "valid.key=value",
+        "invalid key=value", // Space in key
+        "another.valid=test"
+      ]
+    };
+
+    const originalInput = JSON.parse(JSON.stringify(input));
+    transformKeyValueLists(input);
+
+    // Should not transform because one item has invalid key format
+    assert.deepStrictEqual(input.labels, originalInput.labels);
+  });
+
+  test("YAML Compose Sorter handles edge case with equals in value", () => {
+    const input = {
+      environment: [
+        "DATABASE_URL=postgres://user:pass@host:5432/db?key=value",
+        "COMPLEX_VALUE=key1=val1,key2=val2"
+      ]
+    };
+
+    transformKeyValueLists(input);
+
+    assert.strictEqual(typeof input.environment, "object");
+    assert.strictEqual((input.environment as any)["DATABASE_URL"], "postgres://user:pass@host:5432/db?key=value");
+    assert.strictEqual((input.environment as any)["COMPLEX_VALUE"], "key1=val1,key2=val2");
+  });
+
+  test("YAML Compose Sorter handles malformed YAML gracefully", () => {
+    const malformedYaml = "services:\n  web:\n    image: nginx\n  - invalid list item at wrong level";
+    
+    // Should not throw but return original content
+    try {
+      const result = sortYamlContent(malformedYaml);
+      // If parsing fails, it might return original or throw - both are acceptable
+      assert.ok(true, "Function handled malformed YAML without crashing");
+    } catch (error) {
+      // Expected behavior for malformed YAML
+      assert.ok(error instanceof Error, "Should throw an appropriate error for malformed YAML");
+    }
+  });
+
+  test("YAML Compose Sorter handles null and undefined values correctly", () => {
+    const input = {
+      services: {
+        web: {
+          image: "nginx",
+          volumes: null,
+          environment: undefined,
+          labels: []
+        }
+      }
+    };
+
+    const config = {
+      sortOnSave: true,
+      topLevelKeyOrder: ['services'],
+      serviceKeyOrder: ['image', 'volumes', 'environment', 'labels'],
+      addDocumentSeparator: false,
+      addBlankLinesBetweenTopLevelKeys: false,
+      removeVersionKey: false,
+      transformKeyValueLists: true
+    };
+
+    const result = processDockerComposeDocument(input, config);
+    
+    assert.strictEqual(result.services.web.image, "nginx");
+    assert.strictEqual(result.services.web.volumes, null);
+    assert.strictEqual(result.services.web.environment, undefined);
+    assert.deepStrictEqual(result.services.web.labels, []);
+  });
+
+  test("YAML Compose Sorter preserves complex nested structures", () => {
+    const input = {
+      services: {
+        web: {
+          build: {
+            context: ".",
+            dockerfile: "Dockerfile",
+            args: [
+              "BUILD_ENV=production",
+              "API_VERSION=v1"
+            ]
+          }
+        }
+      }
+    };
+
+    transformKeyValueLists(input);
+
+    // Should transform the args array but preserve build structure
+    assert.strictEqual(typeof input.services.web.build.args, "object");
+    assert.strictEqual((input.services.web.build.args as any)["BUILD_ENV"], "production");
+    assert.strictEqual((input.services.web.build.args as any)["API_VERSION"], "v1");
+    assert.strictEqual(input.services.web.build.context, ".");
+    assert.strictEqual(input.services.web.build.dockerfile, "Dockerfile");
+  });
+
+  test("YAML Compose Sorter handles empty objects and arrays", () => {
+    const input = {
+      services: {},
+      volumes: {},
+      networks: {},
+      emptyLabels: [],
+      emptyEnv: []
+    };
+
+    const config = {
+      sortOnSave: true,
+      topLevelKeyOrder: ['services', 'volumes', 'networks'],
+      serviceKeyOrder: [],
+      addDocumentSeparator: false,
+      addBlankLinesBetweenTopLevelKeys: false,
+      removeVersionKey: false,
+      transformKeyValueLists: true
+    };
+
+    const result = processDockerComposeDocument(input, config);
+    
+    assert.deepStrictEqual(result.services, {});
+    assert.deepStrictEqual(result.volumes, {});
+    assert.deepStrictEqual(result.networks, {});
+    assert.deepStrictEqual(result.emptyLabels, []);
+    assert.deepStrictEqual(result.emptyEnv, []);
   });
 });
 

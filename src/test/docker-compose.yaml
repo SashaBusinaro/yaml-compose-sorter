@@ -13,7 +13,7 @@ services:
     restart: always
     depends_on:
       - app
-      
+
   app:
     environment:
       NODE_ENV: production
@@ -24,6 +24,9 @@ services:
     restart: unless-stopped
     expose:
       - "3000"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.traefik.tls=true
 
 networks:
   frontend:

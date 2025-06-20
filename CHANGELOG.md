@@ -3,6 +3,40 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2025-06-21
+
+### Added
+
+- **Key=Value List Transformation**: New optional feature to transform arrays of key=value strings into standard YAML key-value maps
+  - Applies to any part of the document (labels, environment variables, etc.)
+  - Configurable via `yaml-compose-sorter.transformKeyValueLists` setting (disabled by default)
+  - Recursively processes nested objects
+  - Only transforms arrays where ALL items are valid key=value pairs
+  - Preserves arrays that contain non-key=value items (ports, volumes, commands, etc.)
+
+### Enhanced
+
+- **Comprehensive test coverage**: Added extensive tests for the new transformation feature
+- **Type safety**: Improved TypeScript type handling in test suite
+
+### Configuration Options
+
+- `yaml-compose-sorter.transformKeyValueLists`: Transform key=value arrays into objects (default: false)
+
+### Examples
+
+```yaml
+# Before transformation
+labels:
+  - traefik.enable=true
+  - traefik.http.routers.web.rule=Host(`example.org`)
+
+# After transformation  
+labels:
+  traefik.enable: "true"
+  traefik.http.routers.web.rule: "Host(`example.org`)"
+```
+
 ## [0.1.4] - 2025-06-17
 
 ### Docs

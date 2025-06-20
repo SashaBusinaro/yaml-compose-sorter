@@ -26,5 +26,6 @@
   ],
   "yaml-compose-sorter.addDocumentSeparator": false,
   "yaml-compose-sorter.addBlankLinesBetweenTopLevelKeys": true,
-  "yaml-compose-sorter.removeVersionKey": false
+  "yaml-compose-sorter.removeVersionKey": false,
+  "yaml-compose-sorter.transformKeyValueLists": false
 }

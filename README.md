@@ -23,7 +23,7 @@ The extension automatically detects and processes the following Docker Compose f
 - `docker-compose.yaml`
 - `docker-compose.yml`
 - `compose.yaml`
-- `compose.yml` 
+- `compose.yml`
 - `docker-compose.*.yaml`
 - `docker-compose.*.yml`
 - `compose.*.yaml`
@@ -53,6 +53,25 @@ You can customize the extension behavior in VS Code settings:
 | `yaml-compose-sorter.addDocumentSeparator`   | Add `---` document separator at the beginning of YAML files                                 | `false`       |
 | `yaml-compose-sorter.addBlankLinesBetweenTopLevelKeys` | Add blank lines between top-level keys for improved readability                              | `true`        |
 | `yaml-compose-sorter.removeVersionKey`       | Automatically remove the deprecated `version` key from Docker Compose files                 | `false`       |
+| `yaml-compose-sorter.transformKeyValueLists` | Transform arrays of key=value strings into standard YAML key-value maps                    | `false`       |
+
+### Key=Value List Transformation
+
+When `transformKeyValueLists` is enabled, the extension will automatically convert arrays of key=value strings into proper YAML key-value maps:
+
+```yaml
+# Before transformation
+labels:
+  - traefik.enable=true
+  - traefik.http.routers.web.rule=Host(`example.org`)
+
+# After transformation  
+labels:
+  traefik.enable: "true"
+  traefik.http.routers.web.rule: "Host(`example.org`)"
+```
+
+This transformation applies to any part of the document, not just specific sections like labels or environment variables.
 
 ### Example Configuration
 
