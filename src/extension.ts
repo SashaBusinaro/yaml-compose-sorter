@@ -312,8 +312,12 @@ function transformKeyValueLists(obj: any): void {
 		if (obj.hasOwnProperty(key)) {
 			const value = obj[key];
 			
-			// If value is an array of strings that contain '=', transform it
-			if (Array.isArray(value) && value.length > 0) {
+		   // Skip transforming the 'command' field; always keep as array of strings
+		   if (key === 'command') {
+			   continue;
+		   }
+		   // If value is an array of strings that contain '=', transform it
+		   if (Array.isArray(value) && value.length > 0) {
 				const keyValueMap: { [key: string]: string } = {};
 				let allAreKeyValuePairs = true;
 				
