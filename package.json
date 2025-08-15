@@ -2,7 +2,7 @@
   "name": "yaml-compose-sorter",
   "displayName": "YAML Compose Sorter",
   "description": "Sort and format Docker Compose YAML files in a consistent way",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "engines": {
     "vscode": "^1.101.0"
   },
@@ -109,6 +109,11 @@
           "type": "boolean",
           "default": false,
           "description": "Transform arrays of key=value strings into standard YAML key-value maps"
+        },
+        "yaml-compose-sorter.addBlankLinesBetweenServices": {
+          "type": "boolean",
+          "default": true,
+          "description": "Add blank lines between services in the services section for better readability"
         }
       }
     }

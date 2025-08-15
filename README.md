@@ -13,7 +13,7 @@ A Visual Studio Code extension that automatically sorts and formats Docker Compo
 - **Configurable key order**: Customize the order of top-level and service-level keys
 - **Smart file detection**: Processes Docker Compose files with various naming patterns
 - **Document separator**: Optionally adds `---` at the beginning of YAML files
-- **Improved readability**: Adds blank lines between top-level keys for better visual separation
+- **Improved readability**: Adds blank lines between top-level keys and services for better visual separation
 - **Version key removal**: Optionally removes the deprecated `version` key from Docker Compose files
 
 ## Supported File Patterns
@@ -54,6 +54,7 @@ You can customize the extension behavior in VS Code settings:
 | `yaml-compose-sorter.addBlankLinesBetweenTopLevelKeys` | Add blank lines between top-level keys for improved readability                              | `true`        |
 | `yaml-compose-sorter.removeVersionKey`       | Automatically remove the deprecated `version` key from Docker Compose files                 | `false`       |
 | `yaml-compose-sorter.transformKeyValueLists` | Transform arrays of key=value strings into standard YAML key-value maps                    | `false`       |
+| `yaml-compose-sorter.addBlankLinesBetweenServices` | Add blank lines between services in the services section for better readability         | `true`        |
 
 ### Key=Value List Transformation
 
