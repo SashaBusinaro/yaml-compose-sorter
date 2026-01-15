@@ -1,3 +1,11 @@
+<div align="center">
+
+[![Visual Studio Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/SashaBusinaro.yaml-compose-sorter?style=for-the-badge&logo=visualstudiocode&label=Marketplace&color=blue)](https://marketplace.visualstudio.com/items?itemName=SashaBusinaro.yaml-compose-sorter)
+[![Visual Studio Marketplace Installs](https://img.shields.io/visual-studio-marketplace/i/SashaBusinaro.yaml-compose-sorter?style=for-the-badge&logo=visualstudiocode&color=brightgreen)](https://marketplace.visualstudio.com/items?itemName=SashaBusinaro.yaml-compose-sorter)
+[![Visual Studio Marketplace Rating](https://img.shields.io/visual-studio-marketplace/r/SashaBusinaro.yaml-compose-sorter?style=for-the-badge&logo=visualstudiocode&color=green)](https://marketplace.visualstudio.com/items?itemName=SashaBusinaro.yaml-compose-sorter)
+
+</div>
+
 # Docker Compose Sorter
 
 *(Formerly known as YAML Compose Sorter)*
