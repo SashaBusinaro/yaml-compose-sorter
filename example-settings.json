@@ -1,11 +1,11 @@
 {
-  "yaml-compose-sorter.sortOnSave": true,
   "yaml-compose-sorter.topLevelKeyOrder": [
     "version",
     "name",
     "services",
     "volumes",
     "networks",
+    "custom-key",
     "configs",
     "secrets"
   ],
@@ -28,5 +28,11 @@
   "yaml-compose-sorter.addBlankLinesBetweenTopLevelKeys": true,
   "yaml-compose-sorter.removeVersionKey": false,
   "yaml-compose-sorter.transformKeyValueLists": false,
-  "yaml-compose-sorter.addBlankLinesBetweenServices": true
+  "yaml-compose-sorter.addBlankLinesBetweenServices": true,
+
+  "// Configure Format On Save for Docker Compose": "To use this extension on save, add the following:",
+  "[dockercompose]": {
+    "editor.defaultFormatter": "SashaBusinaro.yaml-compose-sorter",
+    "editor.formatOnSave": true
+  }
 }

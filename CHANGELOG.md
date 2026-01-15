@@ -3,6 +3,27 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-01-15
+
+### ⚠️ Breaking Changes
+
+- **Removed `sortOnSave` Setting**: The custom `yaml-compose-sorter.sortOnSave` setting has been removed.
+  - **Action Required**: You must now enable the native VS Code "Format On Save" setting.
+  - Add `"[dockercompose]": { "editor.formatOnSave": true }` to your `settings.json`.
+
+### Added
+
+- **AST-based Comment Preservation**: Fully redesigned the formatting engine to use an Abstract Syntax Tree (AST). All comments (header, inline, block) are now perfectly preserved and moved with their corresponding keys.
+- **Native VS Code Formatting**: The extension now integrates directly with the VS Code formatting API.
+  - Supports "Format Document" command.
+  - Supports standard "Format On Save" (`editor.formatOnSave`).
+- **Smarter File Detection**: Automatically activates for files with the `dockercompose` language ID, in addition to standard file patterns.
+
+### Changed
+
+- **Renamed Extension**: Display name updated to **Docker Compose Sorter**.
+- **Formatted Output**: Improved spacing logic to add visual separation sections and services more reliably.
+
 ## [0.3.0] - 2025-08-15
 
 ### Added
@@ -121,32 +142,4 @@ labels:
 
 ### Added
 
-- Initial release of YAML Compose Sorter
-- Automatic sorting of Docker Compose YAML files on save
-- Manual sorting command accessible via Command Palette
-- Configurable key ordering for top-level and service-level keys
-- Smart detection of Docker Compose files
-- Support for common Docker Compose file naming patterns:
-  - `docker-compose.yaml`
-  - `docker-compose.yml`
-  - `docker-compose.*.yaml`
-  - `docker-compose.*.yml`
-
-### Features
-
-- **Top-level key sorting**: Orders keys like `version`, `services`, `volumes`, `networks` etc.
-- **Service-level key sorting**: Orders service keys like `container_name`, `image`, `ports`, `volumes` etc.
-- **Configurable ordering**: Users can customize key order via VS Code settings
-- **Preservation of data**: All data is preserved, only key order is changed
-- **Error handling**: Graceful handling of invalid YAML files
-
-### Configuration Options
-
-- `yaml-compose-sorter.sortOnSave`: Enable/disable automatic sorting on save (default: true)
-- `yaml-compose-sorter.topLevelKeyOrder`: Customize top-level key order
-- `yaml-compose-sorter.serviceKeyOrder`: Customize service-level key order
-
-### Known Limitations
-
-- Comments in YAML files are not preserved (limitation of js-yaml library)
-- Complex YAML features like anchors and aliases are not preserved
+- **Initial release of YAML Compose Sorter**

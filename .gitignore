@@ -2,5 +2,6 @@ out
 dist
 node_modules
 .vscode-test/
+.github/instructions
 *.vsix
 .DS_Store

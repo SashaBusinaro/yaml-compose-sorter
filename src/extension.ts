@@ -1,534 +1,258 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from "vscode";
-import * as yaml from "js-yaml";
-import * as path from "path";
+import * as yaml from "yaml";
 
-interface DockerComposeConfig {
-  [key: string]: any;
-}
+// ============================================================================
+// Constants & Configuration
+// ============================================================================
 
-interface ExtensionConfig {
-  sortOnSave: boolean;
+const DOCKER_COMPOSE_SELECTOR: vscode.DocumentSelector = [
+  { language: "dockercompose" },
+  { language: "yaml", pattern: "**/docker-compose.{yml,yaml}" },
+  { language: "yaml", pattern: "**/compose.{yml,yaml}" },
+  { language: "yaml", pattern: "**/{docker-compose,compose}.*.{yml,yaml}" }
+];
+
+export interface SorterConfig {
   topLevelKeyOrder: string[];
   serviceKeyOrder: string[];
   addDocumentSeparator: boolean;
-  addBlankLinesBetweenTopLevelKeys: boolean;
+  addBlankLinesTopLevel: boolean;
+  addBlankLinesServices: boolean;
   removeVersionKey: boolean;
   transformKeyValueLists: boolean;
-  addBlankLinesBetweenServices: boolean;
 }
 
-class YamlSortError extends Error {
-  constructor(message: string, public readonly cause?: Error) {
-    super(message);
-    this.name = "YamlSortError";
-  }
-}
+// ============================================================================
+// Extension Lifecycle
+// ============================================================================
 
-const DEFAULT_CONFIG: ExtensionConfig = {
-  sortOnSave: true,
-  topLevelKeyOrder: [
-    "version",
-    "name",
-    "services",
-    "volumes",
-    "networks",
-    "configs",
-    "secrets",
-  ],
-  serviceKeyOrder: [
-    "container_name",
-    "image",
-    "build",
-    "restart",
-    "depends_on",
-    "ports",
-    "expose",
-    "volumes",
-    "environment",
-    "env_file",
-    "networks",
-    "labels",
-    "healthcheck",
-  ],
-  addDocumentSeparator: false,
-  addBlankLinesBetweenTopLevelKeys: true,
-  removeVersionKey: false,
-  transformKeyValueLists: false,
-  addBlankLinesBetweenServices: true,
-};
+export function activate(context: vscode.ExtensionContext): void {
+  const formatter = new DockerComposeFormattingProvider();
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
-export function activate(context: vscode.ExtensionContext) {
-  console.log("YAML Compose Sorter extension is now active!");
+  context.subscriptions.push(
+    vscode.languages.registerDocumentFormattingEditProvider(
+      DOCKER_COMPOSE_SELECTOR,
+      formatter
+    )
+  );
 
-  // Register the sort command
-  const sortCommand = vscode.commands.registerCommand(
-    "yaml-compose-sorter.sortDockerCompose",
-    async () => {
+  context.subscriptions.push(
+    vscode.commands.registerCommand("yaml-compose-sorter.sort", async () => {
       const editor = vscode.window.activeTextEditor;
-      if (!editor) {
-        vscode.window.showWarningMessage("No active editor found");
-        return;
+      if (!editor) { return; }
+      
+      const edits = formatter.provideDocumentFormattingEdits(
+        editor.document, 
+        { insertSpaces: true, tabSize: 2 } as vscode.FormattingOptions, 
+        new vscode.CancellationTokenSource().token
+      );
+
+      if (edits && Array.isArray(edits) && edits.length > 0) {
+        await editor.edit((editBuilder) => {
+          edits.forEach(edit => editBuilder.replace(edit.range, edit.newText));
+        });
       }
-
-      await sortDockerComposeFile(editor);
-    }
-  );
-
-  // Register the document save event listener
-  const onSaveListener = vscode.workspace.onWillSaveTextDocument(
-    async (event) => {
-      const config = getExtensionConfig();
-      if (!config.sortOnSave) {
-        return;
-      }
-
-      const document = event.document;
-      if (isDockerComposeFile(document)) {
-        const editor = vscode.window.activeTextEditor;
-        if (editor && editor.document === document) {
-          // We need to apply edits during the save event
-          event.waitUntil(sortDockerComposeDocument(document));
-        }
-      }
-    }
-  );
-
-  context.subscriptions.push(sortCommand, onSaveListener);
-}
-
-function getExtensionConfig(): ExtensionConfig {
-  const config = vscode.workspace.getConfiguration("yaml-compose-sorter");
-
-  // Validate configuration values
-  const topLevelKeyOrder = config.get("topLevelKeyOrder", [
-    "version",
-    "name",
-    "services",
-    "volumes",
-    "networks",
-    "configs",
-    "secrets",
-  ]);
-  const serviceKeyOrder = config.get("serviceKeyOrder", [
-    "container_name",
-    "image",
-    "build",
-    "restart",
-    "depends_on",
-    "ports",
-    "expose",
-    "volumes",
-    "environment",
-    "env_file",
-    "networks",
-    "labels",
-    "healthcheck",
-  ]);
-
-  // Ensure arrays are valid
-  if (!Array.isArray(topLevelKeyOrder) || !Array.isArray(serviceKeyOrder)) {
-    console.warn("Invalid configuration detected, using defaults");
-    return DEFAULT_CONFIG;
-  }
-
-  return {
-    sortOnSave: config.get("sortOnSave", true),
-    topLevelKeyOrder,
-    serviceKeyOrder,
-    addDocumentSeparator: config.get("addDocumentSeparator", false),
-    addBlankLinesBetweenTopLevelKeys: config.get(
-      "addBlankLinesBetweenTopLevelKeys",
-      true
-    ),
-    removeVersionKey: config.get("removeVersionKey", false),
-    transformKeyValueLists: config.get("transformKeyValueLists", false),
-    addBlankLinesBetweenServices: config.get(
-      "addBlankLinesBetweenServices",
-      true
-    ),
-  };
-}
-
-function isDockerComposeFile(document: vscode.TextDocument): boolean {
-  const fileName = path.basename(document.fileName).toLowerCase();
-  return (
-    fileName === "docker-compose.yml" ||
-    fileName === "docker-compose.yaml" ||
-    fileName === "compose.yml" ||
-    fileName === "compose.yaml" ||
-    (fileName.startsWith("docker-compose.") &&
-      (fileName.endsWith(".yml") || fileName.endsWith(".yaml"))) ||
-    (fileName.startsWith("compose.") &&
-      (fileName.endsWith(".yml") || fileName.endsWith(".yaml")))
+    })
   );
 }
 
-async function sortDockerComposeFile(editor: vscode.TextEditor): Promise<void> {
-  try {
-    const document = editor.document;
+export function deactivate(): void {}
+
+// ============================================================================
+// Formatter Provider
+// ============================================================================
+
+class DockerComposeFormattingProvider implements vscode.DocumentFormattingEditProvider {
+  provideDocumentFormattingEdits(
+    document: vscode.TextDocument,
+    options: vscode.FormattingOptions,
+    token: vscode.CancellationToken
+  ): vscode.TextEdit[] {
     const text = document.getText();
+    const config = this.getConfiguration();
 
-    if (!isDockerComposeFile(document)) {
-      vscode.window.showWarningMessage("This is not a Docker Compose file");
-      return;
-    }
+    try {
+      const formatted = DockerComposeSorter.sort(text, config);
+      
+      if (text === formatted) {
+        return [];
+      }
 
-    const sortedText = sortYamlContent(text);
-
-    if (sortedText !== text) {
       const fullRange = new vscode.Range(
         document.positionAt(0),
         document.positionAt(text.length)
       );
 
-      await editor.edit((editBuilder) => {
-        editBuilder.replace(fullRange, sortedText);
-      });
-
-      vscode.window.showInformationMessage(
-        "Docker Compose file sorted successfully!"
-      );
-    } else {
-      vscode.window.showInformationMessage(
-        "Docker Compose file is already sorted"
-      );
+      return [vscode.TextEdit.replace(fullRange, formatted)];
+    } catch (error) {
+      console.error("Docker Compose Sorter Error:", error);
+      vscode.window.showErrorMessage(`Compose Sorter failed: ${(error as Error).message}`);
+      return [];
     }
-  } catch (error) {
-    vscode.window.showErrorMessage(
-      `Error sorting Docker Compose file: ${error}`
-    );
+  }
+
+  private getConfiguration(): SorterConfig {
+    const config = vscode.workspace.getConfiguration("yaml-compose-sorter");
+    return {
+      topLevelKeyOrder: config.get<string[]>("topLevelKeyOrder") ?? [],
+      serviceKeyOrder: config.get<string[]>("serviceKeyOrder") ?? [],
+      addDocumentSeparator: config.get<boolean>("addDocumentSeparator") ?? false,
+      addBlankLinesTopLevel: config.get<boolean>("addBlankLinesBetweenTopLevelKeys") ?? true,
+      removeVersionKey: config.get<boolean>("removeVersionKey") ?? false,
+      transformKeyValueLists: config.get<boolean>("transformKeyValueLists") ?? false,
+      addBlankLinesServices: config.get<boolean>("addBlankLinesBetweenServices") ?? true,
+    };
   }
 }
 
-async function sortDockerComposeDocument(
-  document: vscode.TextDocument
-): Promise<vscode.TextEdit[]> {
-  try {
-    const text = document.getText();
-    const sortedText = sortYamlContent(text);
+// ============================================================================
+// Core Logic (AST Manipulation)
+// ============================================================================
 
-    if (sortedText !== text) {
-      const fullRange = new vscode.Range(
-        document.positionAt(0),
-        document.positionAt(text.length)
-      );
+export class DockerComposeSorter {
+  public static sort(yamlText: string, config: SorterConfig): string {
+    const doc = yaml.parseDocument(yamlText, { 
+      keepSourceTokens: false // Regenerate tokens for clean sorting
+    });
 
-      return [vscode.TextEdit.replace(fullRange, sortedText)];
+    if (doc.errors.length > 0) {
+      throw new Error("Syntax error in YAML file.");
     }
-  } catch (error) {
-    console.error("Error sorting Docker Compose file on save:", error);
-  }
 
-  return [];
-}
-
-function sortYamlContent(yamlText: string): string {
-  try {
-    const config = getExtensionConfig();
-    const doc = yaml.load(yamlText) as DockerComposeConfig;
-
-    if (!doc || typeof doc !== "object") {
+    if (!doc.contents || !yaml.isMap(doc.contents)) {
       return yamlText;
     }
 
-    // Apply all transformations
-    const processedDoc = processDockerComposeDocument(doc, config);
+    const contents = doc.contents as yaml.YAMLMap;
 
-    // Convert to YAML and apply formatting
-    return formatYamlOutput(processedDoc, config);
-  } catch (error) {
-    if (error instanceof YamlSortError) {
-      throw error;
-    }
-    console.error("Error parsing YAML:", error);
-    throw new YamlSortError(
-      `Invalid YAML format: ${
-        error instanceof Error ? error.message : "Unknown error"
-      }`,
-      error as Error
-    );
-  }
-}
-
-function processDockerComposeDocument(
-  doc: DockerComposeConfig,
-  config: ExtensionConfig
-): DockerComposeConfig {
-  if (!doc || typeof doc !== "object" || Array.isArray(doc)) {
-    throw new YamlSortError("Invalid Docker Compose document structure");
-  }
-
-  // Remove version key if configured
-  let workingDoc = { ...doc };
-  if (config.removeVersionKey && "version" in workingDoc) {
-    delete workingDoc.version;
-  }
-
-  // Sort top-level keys
-  const sortedDoc = sortObjectKeys(workingDoc, config.topLevelKeyOrder);
-
-  // Sort service-level keys if services exist
-  if (
-    sortedDoc.services &&
-    typeof sortedDoc.services === "object" &&
-    !Array.isArray(sortedDoc.services)
-  ) {
-    for (const serviceName in sortedDoc.services) {
-      if (
-        sortedDoc.services.hasOwnProperty(serviceName) &&
-        typeof sortedDoc.services[serviceName] === "object" &&
-        sortedDoc.services[serviceName] !== null &&
-        !Array.isArray(sortedDoc.services[serviceName])
-      ) {
-        sortedDoc.services[serviceName] = sortObjectKeys(
-          sortedDoc.services[serviceName],
-          config.serviceKeyOrder
-        );
-      }
-    }
-  }
-
-  // Transform key=value lists if configured
-  if (config.transformKeyValueLists) {
-    transformKeyValueLists(sortedDoc);
-  }
-
-  return sortedDoc;
-}
-
-function formatYamlOutput(
-  doc: DockerComposeConfig,
-  config: ExtensionConfig
-): string {
-  // Convert back to YAML with proper formatting
-  let yamlOutput = yaml.dump(doc, {
-    indent: 2,
-    lineWidth: -1,
-    noRefs: true,
-    sortKeys: false, // We handle sorting manually
-  });
-
-  // Add blank lines between top-level keys if configured
-  if (config.addBlankLinesBetweenTopLevelKeys) {
-    yamlOutput = addBlankLinesBetweenTopLevelKeys(yamlOutput);
-  }
-
-  // Add blank lines between services if configured
-  if (config.addBlankLinesBetweenServices) {
-    yamlOutput = addBlankLinesBetweenServices(yamlOutput);
-  }
-
-  // Add document separator if configured and not already present
-  if (config.addDocumentSeparator && !yamlOutput.startsWith("---")) {
-    yamlOutput = "---\n" + yamlOutput;
-  }
-
-  return yamlOutput;
-}
-
-function sortObjectKeys(obj: any, keyOrder: string[]): any {
-  if (!obj || typeof obj !== "object" || Array.isArray(obj)) {
-    return obj;
-  }
-
-  const sortedObj: any = {};
-  const objKeys = Object.keys(obj);
-
-  // First, add keys in the specified order
-  for (const key of keyOrder) {
-    if (objKeys.includes(key)) {
-      sortedObj[key] = obj[key];
-    }
-  }
-
-  // Then add any remaining keys in alphabetical order
-  const remainingKeys = objKeys.filter((key) => !keyOrder.includes(key)).sort();
-
-  for (const key of remainingKeys) {
-    sortedObj[key] = obj[key];
-  }
-
-  return sortedObj;
-}
-
-function addBlankLinesBetweenTopLevelKeys(yamlContent: string): string {
-  const lines = yamlContent.split("\n");
-  const result: string[] = [];
-  let hasSeenTopLevelKey = false;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const trimmedLine = line.trim();
-
-    // Check if this is a top-level key (starts at column 0, ends with colon, not empty)
-    const isTopLevelKey =
-      line.length > 0 &&
-      line[0] !== " " &&
-      line[0] !== "\t" &&
-      trimmedLine.endsWith(":") &&
-      !trimmedLine.startsWith("#") &&
-      !trimmedLine.startsWith("---");
-
-    // Add blank line before top-level keys (except the first one)
-    if (isTopLevelKey && hasSeenTopLevelKey) {
-      // Only add blank line if the previous line is not already blank
-      if (result.length > 0 && result[result.length - 1].trim() !== "") {
-        result.push("");
-      }
+    // 1. Remove Version if requested
+    if (config.removeVersionKey && contents.has("version")) {
+      contents.delete("version");
     }
 
-    result.push(line);
+    // 2. Sort Top Level
+    this.sortMap(contents, config.topLevelKeyOrder);
 
-    if (isTopLevelKey) {
-      hasSeenTopLevelKey = true;
-    }
-  }
-
-  return result.join("\n");
-}
-
-function addBlankLinesBetweenServices(yamlContent: string): string {
-  const lines = yamlContent.split("\n");
-  const result: string[] = [];
-  let insideServicesSection = false;
-  let hasSeenFirstService = false;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const trimmedLine = line.trim();
-
-    // Check if we're entering the services section
-    if (trimmedLine === "services:") {
-      insideServicesSection = true;
-      hasSeenFirstService = false;
-      result.push(line);
-      continue;
-    }
-
-    // Check if we're exiting the services section (new top-level key)
-    if (
-      insideServicesSection &&
-      line.length > 0 &&
-      line[0] !== " " &&
-      line[0] !== "\t" &&
-      trimmedLine.endsWith(":") &&
-      !trimmedLine.startsWith("#")
-    ) {
-      insideServicesSection = false;
-      hasSeenFirstService = false;
-    }
-
-    // If we're inside services section, check for service definitions
-    if (insideServicesSection && line.length > 0) {
-      // Service definitions start with 2 spaces (or 1 tab) and end with colon
-      const isServiceDefinition =
-        (line.startsWith("  ") &&
-          !line.startsWith("    ") &&
-          trimmedLine.endsWith(":") &&
-          !trimmedLine.startsWith("#")) ||
-        (line.startsWith("\t") &&
-          !line.startsWith("\t\t") &&
-          trimmedLine.endsWith(":") &&
-          !trimmedLine.startsWith("#"));
-
-      if (isServiceDefinition) {
-        // Add blank line before service (except the first one)
-        if (
-          hasSeenFirstService &&
-          result.length > 0 &&
-          result[result.length - 1].trim() !== ""
-        ) {
-          result.push("");
+    // 3. Process Services
+    const services = contents.get("services");
+    if (services && yaml.isMap(services)) {
+      services.items.forEach((pair) => {
+        if (yaml.isMap(pair.value)) {
+          this.sortMap(pair.value as yaml.YAMLMap, config.serviceKeyOrder);
         }
-        hasSeenFirstService = true;
-      }
+      });
     }
 
-    result.push(line);
+    // 4. Transform Lists ["KEY=VAL"] -> { KEY: VAL }
+    if (config.transformKeyValueLists) {
+      this.transformListsToMaps(doc);
+    }
+
+    // 5. Apply Spacing
+    this.applySpacing(contents, config);
+
+    // 6. Serialize
+    let output = doc.toString({
+      lineWidth: 0,
+      minContentWidth: 0,
+      indent: 2
+    });
+
+    if (config.addDocumentSeparator && !output.startsWith("---")) {
+      output = "---\n" + output;
+    }
+
+    return output;
   }
 
-  return result.join("\n");
-}
+  private static sortMap(map: yaml.YAMLMap, order: string[]): void {
+    map.items.sort((a, b) => {
+      const keyA = String(a.key);
+      const keyB = String(b.key);
+      
+      const idxA = order.indexOf(keyA);
+      const idxB = order.indexOf(keyB);
 
-function transformKeyValueLists(obj: any): void {
-  if (!obj || typeof obj !== "object") {
-    return;
+      if (idxA > -1 && idxB > -1) { return idxA - idxB; }
+      if (idxA > -1) { return -1; }
+      if (idxB > -1) { return 1; }
+      
+      return keyA.localeCompare(keyB);
+    });
   }
 
-  // Recursively process all properties
-  for (const key in obj) {
-    if (obj.hasOwnProperty(key)) {
-      const value = obj[key];
+  private static transformListsToMaps(doc: yaml.Document): void {
+    yaml.visit(doc, {
+      Pair(_, pair) {
+        // Skip 'command' or 'entrypoint' as they strictly require array syntax often
+        const key = (pair.key as yaml.Scalar).value as string;
+        if (["command", "entrypoint"].includes(key)) {
+          return yaml.visit.SKIP;
+        }
 
-      // Skip transforming the 'command' field; always keep as array of strings
-      if (key === "command") {
-        continue;
+        if (yaml.isSeq(pair.value) && DockerComposeSorter.canTransformSeq(pair.value)) {
+          pair.value = DockerComposeSorter.seqToMap(pair.value);
+        }
       }
-      // If value is an array of strings that contain '=', transform it
-      if (Array.isArray(value) && value.length > 0) {
-        const keyValueMap: { [key: string]: string } = {};
-        let allAreKeyValuePairs = true;
+    });
+  }
 
-        // Check if all array items are key=value strings
-        for (const item of value) {
-          if (typeof item === "string" && item.includes("=")) {
-            const equalIndex = item.indexOf("=");
-            if (equalIndex > 0 && equalIndex < item.length - 1) {
-              const itemKey = item.substring(0, equalIndex).trim();
-              const itemValue = item.substring(equalIndex + 1);
+  private static canTransformSeq(seq: yaml.YAMLSeq): boolean {
+    if (seq.items.length === 0) { return false; }
+    return seq.items.every(item => {
+      if (!yaml.isScalar(item) || typeof item.value !== 'string') { return false; }
+      const str = item.value;
+      return str.includes('=') && !str.startsWith('=') && !str.endsWith('=');
+    });
+  }
 
-              // Validate key name (basic validation for Docker Compose labels/env vars)
-              if (
-                itemKey &&
-                !itemKey.includes(" ") &&
-                !itemKey.includes("\t")
-              ) {
-                keyValueMap[itemKey] = itemValue;
-              } else {
-                allAreKeyValuePairs = false;
-                break;
-              }
-            } else {
-              allAreKeyValuePairs = false;
-              break;
-            }
-          } else {
-            allAreKeyValuePairs = false;
-            break;
+  private static seqToMap(seq: yaml.YAMLSeq): yaml.YAMLMap {
+    const map = new yaml.YAMLMap();
+    if (seq.commentBefore) { map.commentBefore = seq.commentBefore; }
+    if (seq.comment) { map.comment = seq.comment; }
+
+    seq.items.forEach(item => {
+      if (yaml.isScalar(item) && typeof item.value === 'string') {
+        const [key, ...rest] = item.value.split('=');
+        const val = rest.join('=');
+        
+        // Preserve comments
+        const pair = new yaml.Pair(new yaml.Scalar(key.trim()), new yaml.Scalar(val));
+        if (item.comment) { pair.value!.comment = item.comment; }
+        if (item.commentBefore) { pair.key!.commentBefore = item.commentBefore; }
+        
+        map.add(pair);
+      }
+    });
+    return map;
+  }
+
+  private static applySpacing(contents: yaml.YAMLMap, config: SorterConfig): void {
+    const resetSpacing = (node: any) => {
+        if(node && node.key) { node.key.spaceBefore = false; }
+    };
+
+    contents.items.forEach(resetSpacing);
+    
+    // Top Level Spacing
+    if (config.addBlankLinesTopLevel) {
+      contents.items.forEach((item, index) => {
+        if (index > 0 && yaml.isScalar(item.key)) {
+          item.key.spaceBefore = true;
+        }
+      });
+    }
+
+    // Service Level Spacing
+    if (config.addBlankLinesServices) {
+      const services = contents.get("services");
+      if (services && yaml.isMap(services)) {
+        services.items.forEach((item, index) => {
+          if (index > 0 && yaml.isScalar(item.key)) {
+             item.key.spaceBefore = true;
           }
-        }
-
-        // Transform the array to an object if all items are key=value pairs
-        if (allAreKeyValuePairs && Object.keys(keyValueMap).length > 0) {
-          obj[key] = keyValueMap;
-        }
-      } else if (
-        typeof value === "object" &&
-        value !== null &&
-        !Array.isArray(value)
-      ) {
-        // Recursively process nested objects
-        transformKeyValueLists(value);
+        });
       }
     }
   }
 }
-
-// This method is called when your extension is deactivated
-export function deactivate() {}
-
-// Export functions for testing
-export {
-  isDockerComposeFile,
-  sortObjectKeys,
-  sortYamlContent,
-  addBlankLinesBetweenTopLevelKeys,
-  transformKeyValueLists,
-  processDockerComposeDocument,
-  formatYamlOutput,
-  addBlankLinesBetweenServices,
-};

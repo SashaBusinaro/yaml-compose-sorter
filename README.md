@@ -1,78 +1,101 @@
-# YAML Compose Sorter
+# Docker Compose Sorter
 
-A Visual Studio Code extension that automatically sorts and formats Docker Compose YAML files in a consistent way across projects.
+*(Formerly known as YAML Compose Sorter)*
+
+A Visual Studio Code extension that automatically sorts, formats, and standardizes Docker Compose files. It ensures consistency across your projects by enforcing a specific order for keys and services.
 
 ## Preview
 
-![Preview](images/preview.gif)
+![Example](images/example.png)
+
+## What's New in v1.0.0
+
+> **Comment Preservation**: We now use a powerful AST parser. Your comments (inline and blocks) are now perfectly preserved and moved along with their keys!
+- **Native Formatter API**: The extension now works as a standard VS Code formatter.
+- **Smarter Detection**: Automatically detects files with the `dockercompose` language ID (if the Docker extension is installed) or falls back to file patterns.
 
 ## Features
 
-- **Automatic sorting on save**: Sorts Docker Compose files automatically when you save them
-- **Manual sorting command**: Sort files on demand using the command palette
-- **Configurable key order**: Customize the order of top-level and service-level keys
-- **Smart file detection**: Processes Docker Compose files with various naming patterns
-- **Document separator**: Optionally adds `---` at the beginning of YAML files
-- **Improved readability**: Adds blank lines between top-level keys and services for better visual separation
-- **Version key removal**: Optionally removes the deprecated `version` key from Docker Compose files
+- **Standardized Sorting**: Enforce a consistent order for top-level keys (`version`, `services`, `volumes`, etc.) and service-level keys (`image`, `environment`, `ports`, etc.).
+- **Native Formatting**: Works with the standard "Format Document" command and "Format On Save".
+- **Document Separator**: Optionally adds `---` at the beginning of YAML files.
+- **Visual Separation**: Adds blank lines between services and top-level blocks for better readability.
+- **Key=Value Transformation**: Optionally converts legacy list syntax (e.g., in `labels`) to map syntax.
+- **Clean Up**: Optionally removes the deprecated `version` key.
+- **Custom Key Support**: Add custom keys to the `topLevelKeyOrder` or `serviceKeyOrder` arrays in your `settings.json` to include them in the sorting logic.
 
-## Supported File Patterns
 
-The extension automatically detects and processes the following Docker Compose file patterns:
+## Usage & Configuration
 
-- `docker-compose.yaml`
-- `docker-compose.yml`
-- `compose.yaml`
-- `compose.yml`
-- `docker-compose.*.yaml`
-- `docker-compose.*.yml`
-- `compose.*.yaml`
-- `compose.*.yml`
+### 1. Enabling "Format on Save" (Recommended)
 
-## Usage
+In v1.0.0, we removed the custom `sortOnSave` setting in favor of the native VS Code API. To sort your files automatically when saving, add this to your `settings.json`:
 
-### Automatic Sorting
+```json
+"[dockercompose]": {
+  "editor.defaultFormatter": "SashaBusinaro.yaml-compose-sorter",
+  "editor.formatOnSave": true
+},
+"[yaml]": {
+  "editor.defaultFormatter": "SashaBusinaro.yaml-compose-sorter",
+  "editor.formatOnSave": true
+}
 
-The extension automatically sorts Docker Compose files when you save them (if `sortOnSave` is enabled in settings).
+```
 
-### Manual Sorting
+### 2. Manual Sorting
 
-1. Open a Docker Compose file (`docker-compose.yaml`, `docker-compose.yml`, `compose.yaml`, `compose.yml`, etc.)
-2. Open the Command Palette (`Cmd+Shift+P` on Mac, `Ctrl+Shift+P` on Windows/Linux)
-3. Type "Sort Docker Compose YAML" and press Enter
+You can trigger the sort manually at any time:
 
-## Configuration
+* **Right-click** inside the editor and select **Format Document**.
+* Or open the **Command Palette** (`Cmd+Shift+P` / `Ctrl+Shift+P`) and type **"Sort Docker Compose"**.
 
-You can customize the extension behavior in VS Code settings:
+## Supported Files
 
-| Setting                                      | Description                                                                                  | Default Value |
-|----------------------------------------------|----------------------------------------------------------------------------------------------|---------------|
-| `yaml-compose-sorter.sortOnSave`             | Enable or disable automatic sorting on save                                                  | `true`        |
-| `yaml-compose-sorter.topLevelKeyOrder`       | Array of top-level key names in the desired order                                            | `[version, name, services, volumes, networks, configs, secrets]` |
-| `yaml-compose-sorter.serviceKeyOrder`        | Array of service-level key names in the desired order                                        | `[container_name, image, build, restart, depends_on, ports, expose, volumes, environment, env_file, networks, labels, healthcheck]` |
-| `yaml-compose-sorter.addDocumentSeparator`   | Add `---` document separator at the beginning of YAML files                                 | `false`       |
-| `yaml-compose-sorter.addBlankLinesBetweenTopLevelKeys` | Add blank lines between top-level keys for improved readability                              | `true`        |
-| `yaml-compose-sorter.removeVersionKey`       | Automatically remove the deprecated `version` key from Docker Compose files                 | `false`       |
-| `yaml-compose-sorter.transformKeyValueLists` | Transform arrays of key=value strings into standard YAML key-value maps                    | `false`       |
-| `yaml-compose-sorter.addBlankLinesBetweenServices` | Add blank lines between services in the services section for better readability         | `true`        |
+The extension activates automatically for:
 
-### Key=Value List Transformation
+1. Files with the `dockercompose` Language Mode (requires Microsoft Docker extension).
+2. Files matching these patterns:
+* `docker-compose.yaml` / `.yml`
+* `compose.yaml` / `.yml`
+* `*.docker-compose.yaml` / `*.compose.yaml` (and variants)
 
-When `transformKeyValueLists` is enabled, the extension will automatically convert arrays of key=value strings into proper YAML key-value maps:
+
+## Extension Settings
+
+You can customize the sorting behavior in VS Code settings.
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| `yaml-compose-sorter.topLevelKeyOrder` | `[version, name, services...]` | Order of root keys (e.g., put `volumes` at the end). |
+| `yaml-compose-sorter.serviceKeyOrder` | `[image, build, ...]` | Order of keys inside a service definition. |
+| `yaml-compose-sorter.addBlankLinesBetweenTopLevelKeys` | `true` | Adds a blank line between root blocks (e.g., between `services` and `networks`). |
+| `yaml-compose-sorter.addBlankLinesBetweenServices` | `true` | Adds a blank line between each service definition. |
+| `yaml-compose-sorter.addDocumentSeparator` | `false` | Ensures the file starts with `---`. |
+| `yaml-compose-sorter.removeVersionKey` | `false` | Removes the `version` key (deprecated in recent Compose specs). |
+| `yaml-compose-sorter.transformKeyValueLists` | `false` | Converts array syntax to map syntax (see example below). |
+
+### Feature Spotlight: Key=Value Transformation
+
+If you enable `transformKeyValueLists`, the extension converts array-based configurations into cleaner YAML maps.
+
+**Before:**
 
 ```yaml
-# Before transformation
 labels:
-  - traefik.enable=true
-  - traefik.http.routers.web.rule=Host(`example.org`)
+  - "traefik.enable=true"
+  - "traefik.http.routers.web.rule=Host(`example.org`)"
 
-# After transformation  
+```
+
+**After:**
+
+```yaml
 labels:
   traefik.enable: "true"
   traefik.http.routers.web.rule: "Host(`example.org`)"
-```
 
-This transformation applies to any part of the document, not just specific sections like labels or environment variables.
+```
 
 ### Example Configuration
 
@@ -80,10 +103,4 @@ You can see an example configuration in the file `example-settings.json` include
 
 ## Requirements
 
-- Visual Studio Code 1.101.0 or higher
-- Docker Compose YAML files must be valid YAML format
-
-## Known Issues
-
-- Comments in YAML files may be lost during sorting (this is a limitation of the YAML parser)
-- Complex YAML features like anchors and aliases are not preserved
+* Visual Studio Code 1.101.0 or higher.

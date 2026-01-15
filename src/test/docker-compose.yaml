@@ -1,36 +1,29 @@
+networks:
+  backend-net:
+    driver: bridge
+# Root level comment
+volumes:
+  postgres_data:
 services:
   web:
-    networks:
-      - frontend
+    # Inline comment should stay
     ports:
       - "80:80"
-      - "8081:8080"
-      - "90:40"
     image: nginx:latest
-    container_name: my-nginx
-    volumes:
-      - ./html:/usr/share/nginx/html
-    restart: always
-    depends_on:
-      - app
-
-  app:
     environment:
-      NODE_ENV: production
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: my-app
-    restart: unless-stopped
-    expose:
-      - "3000"
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.traefik.tls=true
+      - DEBUG=true
+      - NODE_ENV=production
+    # This is a block comment for build
+    build: .
+    restart: always
 
-networks:
-  frontend:
-    driver: bridge
-version: "3.8"
-volumes:
-  data:
+  # Comment for database service
+  db:
+    environment:
+      - POSTGRES_PASSWORD=secret
+      - POSTGRES_USER=admin
+    image: postgres:15
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+version: "3.9"
+# Final file comment
