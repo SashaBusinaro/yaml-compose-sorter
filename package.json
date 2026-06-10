@@ -145,7 +145,7 @@
     "chai": "^4.5.0",
     "eslint": "^9.25.1",
     "eslint-config-prettier": "^10.1.8",
-    "glob": "^11.0.3",
+    "glob": "^13.0.6",
     "husky": "^9.1.7",
     "lint-staged": "^17.0.7",
     "prettier": "^3.8.4",
