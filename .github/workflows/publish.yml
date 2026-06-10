@@ -1,7 +1,9 @@
 name: Test and Publish Extension
 
 on:
-  # Triggered by the GitHub Release created when the release-please PR is merged.
+  # Manual fallback: automated publishing lives in release-please.yml because
+  # releases created with the automatic GITHUB_TOKEN don't trigger this event.
+  workflow_dispatch:
   release:
     types: [published]
 
