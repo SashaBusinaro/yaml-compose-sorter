@@ -1,8 +1,17 @@
 .vscode/**
 .vscode-test/**
+out/test/**
+.github/**
+.husky/**
 src/**
 .gitignore
 .yarnrc
+.editorconfig
+.prettierrc.json
+.prettierignore
+release-please-config.json
+.release-please-manifest.json
+example-settings.json
 vsc-extension-quickstart.md
 **/tsconfig.json
 **/eslint.config.mjs

@@ -1,0 +1,8 @@
+out
+dist
+node_modules
+.vscode-test
+package-lock.json
+CHANGELOG.md
+*.vsix
+images

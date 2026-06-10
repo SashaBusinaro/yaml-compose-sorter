@@ -119,7 +119,19 @@
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vscode-test",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.ts": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml,mjs}": [
+      "prettier --write"
+    ]
   },
   "devDependencies": {
     "@types/chai": "^4.3.20",
@@ -132,7 +144,11 @@
     "@vscode/test-electron": "^2.5.2",
     "chai": "^4.5.0",
     "eslint": "^9.25.1",
+    "eslint-config-prettier": "^10.1.8",
     "glob": "^11.0.3",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.7",
+    "prettier": "^3.8.4",
     "typescript": "^5.8.3"
   },
   "dependencies": {
