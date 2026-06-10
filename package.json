@@ -2,7 +2,7 @@
   "name": "yaml-compose-sorter",
   "displayName": "Docker Compose Sorter",
   "description": "Standardize and sort Docker Compose files in a consistent way",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "engines": {
     "vscode": "^1.101.0"
   },

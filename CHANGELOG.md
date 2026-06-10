@@ -3,6 +3,14 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1](https://github.com/SashaBusinaro/yaml-compose-sorter/compare/v1.0.0...v1.0.1) (2026-06-10)
+
+
+### Bug Fixes
+
+* align settings UI title with Docker Compose Sorter display name ([d99d8df](https://github.com/SashaBusinaro/yaml-compose-sorter/commit/d99d8df7058d00f1174b1fcdfa2a800dde99db48))
+* preserve CRLF, multi-doc files and x-* anchor ordering ([23df403](https://github.com/SashaBusinaro/yaml-compose-sorter/commit/23df403a465292009f24213d434d659acf7a2345)), closes [#6](https://github.com/SashaBusinaro/yaml-compose-sorter/issues/6)
+
 ## [1.0.0] - 2026-01-15
 
 ### ⚠️ Breaking Changes
