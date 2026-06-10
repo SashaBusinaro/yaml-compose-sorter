@@ -1,8 +1,10 @@
 <div align="center">
 
-[![Visual Studio Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/SashaBusinaro.yaml-compose-sorter?style=for-the-badge&logo=visualstudiocode&label=Marketplace&color=blue)](https://marketplace.visualstudio.com/items?itemName=SashaBusinaro.yaml-compose-sorter)
-[![Visual Studio Marketplace Installs](https://img.shields.io/visual-studio-marketplace/i/SashaBusinaro.yaml-compose-sorter?style=for-the-badge&logo=visualstudiocode&color=brightgreen)](https://marketplace.visualstudio.com/items?itemName=SashaBusinaro.yaml-compose-sorter)
-[![Visual Studio Marketplace Rating](https://img.shields.io/visual-studio-marketplace/r/SashaBusinaro.yaml-compose-sorter?style=for-the-badge&logo=visualstudiocode&color=green)](https://marketplace.visualstudio.com/items?itemName=SashaBusinaro.yaml-compose-sorter)
+[![VS Marketplace Version](https://badgen.net/vs-marketplace/v/SashaBusinaro.yaml-compose-sorter)](https://marketplace.visualstudio.com/items?itemName=SashaBusinaro.yaml-compose-sorter)
+[![VS Marketplace Installs](https://badgen.net/vs-marketplace/i/SashaBusinaro.yaml-compose-sorter)](https://marketplace.visualstudio.com/items?itemName=SashaBusinaro.yaml-compose-sorter)
+[![VS Marketplace Rating](https://badgen.net/vs-marketplace/rating/SashaBusinaro.yaml-compose-sorter)](https://marketplace.visualstudio.com/items?itemName=SashaBusinaro.yaml-compose-sorter)
+[![CI](https://github.com/SashaBusinaro/yaml-compose-sorter/actions/workflows/ci.yml/badge.svg)](https://github.com/SashaBusinaro/yaml-compose-sorter/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/github/license/SashaBusinaro/yaml-compose-sorter)](LICENSE)
 
 </div>
 
@@ -15,13 +17,6 @@ A Visual Studio Code extension that automatically sorts, formats, and standardiz
 ## Preview
 
 ![Example](images/example.png)
-
-## What's New in v1.0.0
-
-> **Comment Preservation**: We now use a powerful AST parser. Your comments (inline and blocks) are now perfectly preserved and moved along with their keys!
-
-- **Native Formatter API**: The extension now works as a standard VS Code formatter.
-- **Smarter Detection**: Automatically detects files with the `dockercompose` language ID (if the Docker extension is installed) or falls back to file patterns.
 
 ## Features
 
@@ -76,7 +71,7 @@ You can customize the sorting behavior in VS Code settings.
 | Setting                                                | Default                        | Description                                                                      |
 | ------------------------------------------------------ | ------------------------------ | -------------------------------------------------------------------------------- |
 | `yaml-compose-sorter.topLevelKeyOrder`                 | `[version, name, services...]` | Order of root keys (e.g., put `volumes` at the end).                             |
-| `yaml-compose-sorter.serviceKeyOrder`                  | `[image, build, ...]`          | Order of keys inside a service definition.                                       |
+| `yaml-compose-sorter.serviceKeyOrder`                  | `[container_name, image, ...]` | Order of keys inside a service definition.                                       |
 | `yaml-compose-sorter.addBlankLinesBetweenTopLevelKeys` | `true`                         | Adds a blank line between root blocks (e.g., between `services` and `networks`). |
 | `yaml-compose-sorter.addBlankLinesBetweenServices`     | `true`                         | Adds a blank line between each service definition.                               |
 | `yaml-compose-sorter.addDocumentSeparator`             | `false`                        | Ensures the file starts with `---`.                                              |
@@ -118,3 +113,7 @@ You can see an example configuration in the file `example-settings.json` include
 ## Requirements
 
 - Visual Studio Code 1.101.0 or higher.
+
+## Release Notes
+
+See the [CHANGELOG](CHANGELOG.md) for the full release history.
