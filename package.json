@@ -51,7 +51,7 @@
       }
     ],
     "configuration": {
-      "title": "YAML Compose Sorter",
+      "title": "Docker Compose Sorter",
       "properties": {
         "yaml-compose-sorter.topLevelKeyOrder": {
           "type": "array",
