@@ -6,6 +6,11 @@ updates:
       interval: weekly
     commit-message:
       prefix: "chore(deps)"
+    ignore:
+      # @types/vscode must track engines.vscode (the minimum supported VS Code
+      # version), never the latest release: bumping it above engines.vscode
+      # makes `vsce publish` reject the package.
+      - dependency-name: "@types/vscode"
     groups:
       dev-dependencies:
         dependency-type: development
