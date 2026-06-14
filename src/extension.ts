@@ -314,6 +314,7 @@ export class DockerComposeSorter {
       contents.items.forEach((item, index) => {
         if (index > 0 && yaml.isScalar(item.key)) {
           item.key.spaceBefore = true;
+          this.stripBoundaryCommentBlanks(contents.items[index - 1].value);
         }
       });
     }
@@ -325,9 +326,46 @@ export class DockerComposeSorter {
         services.items.forEach((item, index) => {
           if (index > 0 && yaml.isScalar(item.key)) {
             item.key.spaceBefore = true;
+            this.stripBoundaryCommentBlanks(services.items[index - 1].value);
           }
         });
       }
+    }
+  }
+
+  /**
+   * The blank line that separates a block from the following sibling is owned
+   * by that sibling's `spaceBefore` flag. A trailing comment that closes the
+   * preceding block can *also* encode those blank lines as trailing newlines in
+   * its `comment` string. Left untouched they stack with `spaceBefore` and grow
+   * by one on every format run (issue #21), breaking idempotency.
+   *
+   * Strip the trailing blank-line newlines from the comment that renders right
+   * before the next sibling: the outermost trailing comment along the rightmost
+   * spine of `prevValue`. Inner comments and `commentBefore` are left alone, so
+   * blank lines *inside* a block are preserved.
+   */
+  private static stripBoundaryCommentBlanks(prevValue: unknown): void {
+    let node = prevValue as { comment?: unknown; items?: unknown[] } | null | undefined;
+
+    while (node) {
+      if (typeof node.comment === "string") {
+        // Outermost trailing comment found: normalize it only if it carries
+        // boundary blank lines, then stop (deeper comments stay intra-block).
+        node.comment = node.comment.replace(/\n+$/, "");
+        return;
+      }
+
+      // Descend along the rightmost spine (last child) toward the boundary.
+      if (!yaml.isMap(node) && !yaml.isSeq(node)) {
+        return;
+      }
+      const items = node.items;
+      if (!items || items.length === 0) {
+        return;
+      }
+      const last = items[items.length - 1];
+      node = (yaml.isPair(last) ? last.value : last) as typeof node;
     }
   }
 }
