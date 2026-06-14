@@ -470,4 +470,106 @@ version: "3.8"
     const twice = DockerComposeSorter.sort(once, cleanConfig());
     expect(twice).to.equal(once);
   });
+
+  /*
+   * ==========================================
+   * 8. Idempotency with trailing comments (issue #21)
+   * ==========================================
+   *
+   * A comment that closes a block absorbs the blank line separating it from the
+   * next section as trailing newlines in its `comment` string. That blank line
+   * is also owned by the next key's `spaceBefore`, so without normalization the
+   * two stack and a new blank line is added on every format run.
+   */
+  test("Idempotency: trailing comment before a top-level section (issue #21)", () => {
+    const input = `services:
+  nginx:
+    image: nginx
+    networks:
+      - nginx-net
+    # Comment
+
+networks:
+  nginx-net:
+    name: nginx-net
+`;
+    const expected = `services:
+  nginx:
+    image: nginx
+    networks:
+      - nginx-net
+    # Comment
+
+networks:
+  nginx-net:
+    name: nginx-net
+`;
+    const once = DockerComposeSorter.sort(input, cleanConfig());
+    // Exactly one blank line between the comment and the next section.
+    expect(once).to.equal(expected);
+
+    // Re-running must not add further blank lines.
+    let current = once;
+    for (let i = 0; i < 4; i++) {
+      current = DockerComposeSorter.sort(current, cleanConfig());
+      expect(current, `run ${i + 2} changed the output`).to.equal(once);
+    }
+  });
+
+  test("Idempotency: trailing comment between two services", () => {
+    const input = `services:
+  alpha:
+    image: alpha
+    # tail comment
+
+  beta:
+    image: beta
+`;
+    const once = DockerComposeSorter.sort(input, cleanConfig());
+    const twice = DockerComposeSorter.sort(once, cleanConfig());
+    expect(twice).to.equal(once);
+    // Single blank line between the comment and the next service.
+    expect(once).to.contain("# tail comment\n\n  beta:");
+    expect(once).to.not.contain("# tail comment\n\n\n");
+  });
+
+  test("Idempotency: deeply nested trailing comment before a section", () => {
+    const input = `services:
+  nginx:
+    image: nginx
+    networks:
+      - nginx-net
+      # deep comment
+
+networks:
+  net: {}
+`;
+    const once = DockerComposeSorter.sort(input, cleanConfig());
+    const twice = DockerComposeSorter.sort(once, cleanConfig());
+    expect(twice).to.equal(once);
+    expect(once).to.contain("# deep comment\n\nnetworks:");
+    expect(once).to.not.contain("# deep comment\n\n\n");
+  });
+
+  test("Idempotency: blank line inside a block (no spaceBefore) is preserved", () => {
+    // The comment closes the `environment` list and is followed by `labels`, a
+    // service key that never receives `spaceBefore` (only top-level keys and
+    // service names do). The blank line is intra-block and must survive
+    // untouched, proving the fix is not over-eager. Keys are already in config
+    // order so sorting does not move them.
+    const input = `services:
+  web:
+    image: nginx
+    environment:
+      - A=1
+      # note
+
+    labels:
+      - x=y
+`;
+    const once = DockerComposeSorter.sort(input, cleanConfig());
+    const twice = DockerComposeSorter.sort(once, cleanConfig());
+    expect(twice).to.equal(once);
+    expect(once).to.contain("# note\n\n    labels:");
+  });
 });
