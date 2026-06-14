@@ -470,4 +470,34 @@ version: "3.8"
     const twice = DockerComposeSorter.sort(once, cleanConfig());
     expect(twice).to.equal(once);
   });
+
+  test("Robustness: Trailing comment does not add extra blank lines on each format run", () => {
+    const input = `services:
+  nginx:
+    image: nginx
+    networks:
+      - nginx-net
+    # Comment
+
+networks:
+  nginx-net:
+    name: nginx-net
+`;
+    const once = DockerComposeSorter.sort(input, cleanConfig());
+    const twice = DockerComposeSorter.sort(once, cleanConfig());
+
+    // Exactly one blank line between the comment and the next section
+    const lines = once.split("\n");
+    const commentIdx = lines.findIndex((l) => l.includes("# Comment"));
+    expect(commentIdx).to.be.greaterThan(-1);
+    const netIdx = lines.findIndex((l) => l.startsWith("networks:"));
+    expect(netIdx).to.be.greaterThan(commentIdx);
+    // There should be exactly one blank line (one empty line) between comment and networks
+    const betweenLines = lines.slice(commentIdx + 1, netIdx);
+    expect(betweenLines).to.have.lengthOf(1);
+    expect(betweenLines[0]).to.equal("");
+
+    // Second format should produce identical output
+    expect(twice).to.equal(once);
+  });
 });

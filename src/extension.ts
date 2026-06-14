@@ -300,6 +300,22 @@ export class DockerComposeSorter {
     return map;
   }
 
+  private static lastValueHasComment(value: any): boolean {
+    if (!value) {
+      return false;
+    }
+    if (value.comment) {
+      return true;
+    }
+    if (yaml.isMap(value) && value.items.length > 0) {
+      return DockerComposeSorter.lastValueHasComment(value.items[value.items.length - 1].value);
+    }
+    if (yaml.isSeq(value) && value.items.length > 0) {
+      return DockerComposeSorter.lastValueHasComment(value.items[value.items.length - 1]);
+    }
+    return false;
+  }
+
   private static applySpacing(contents: yaml.YAMLMap, config: SorterConfig): void {
     const resetSpacing = (node: any) => {
       if (node && node.key) {
@@ -313,7 +329,11 @@ export class DockerComposeSorter {
     if (config.addBlankLinesTopLevel) {
       contents.items.forEach((item, index) => {
         if (index > 0 && yaml.isScalar(item.key)) {
-          item.key.spaceBefore = true;
+          // Don't add spaceBefore if the previous item ends with a trailing
+          // the yaml stringifier already inserts a blank line there
+          if (!DockerComposeSorter.lastValueHasComment(contents.items[index - 1].value)) {
+            item.key.spaceBefore = true;
+          }
         }
       });
     }
@@ -324,7 +344,9 @@ export class DockerComposeSorter {
       if (services && yaml.isMap(services)) {
         services.items.forEach((item, index) => {
           if (index > 0 && yaml.isScalar(item.key)) {
-            item.key.spaceBefore = true;
+            if (!DockerComposeSorter.lastValueHasComment(services.items[index - 1].value)) {
+              item.key.spaceBefore = true;
+            }
           }
         });
       }
