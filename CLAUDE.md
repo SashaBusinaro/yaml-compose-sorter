@@ -1,12 +1,13 @@
 # CLAUDE.md
 
-VS Code extension ("Docker Compose Sorter") that sorts and formats Docker Compose files while preserving comments. Single-file implementation: all logic lives in `src/extension.ts` (formatter provider + `DockerComposeSorter` AST engine built on the `yaml` package).
+VS Code extension ("Docker Compose Sorter") that sorts and formats Docker Compose files while preserving comments. Modular implementation: pure AST engine lives in `src/core/` (built on the `yaml` package, zero VS Code runtime dependencies), while VS Code integration and formatting providers live in `src/extension.ts`.
 
 ## Commands
 
 - `npm run compile` — TypeScript build to `out/`
 - `npm run lint` / `npm run format` — ESLint / Prettier (Prettier owns formatting)
-- `npm test` — Mocha suite via `vscode-test` using `node:assert/strict` (downloads VS Code on first run)
+- `npm run test:unit` — Fast (<100ms) pure-Node Mocha suite for AST logic
+- `npm test` — Full VS Code integration suite via `vscode-test` using `node:assert/strict`
 - `npx @vscode/vsce package` — build the VSIX locally
 
 ## Invariants — do not break
@@ -18,4 +19,4 @@ VS Code extension ("Docker Compose Sorter") that sorts and formats Docker Compos
 
 ## Workflow
 
-Conventional commits required (release-please derives versions/CHANGELOG from them). PRs need the `test` CI check green. Merging the release-please PR creates a GitHub Release, which triggers the Marketplace publish (`VSCE_PAT` secret). Pre-commit hook runs lint-staged (ESLint + Prettier).
+Conventional commits required (release-please derives versions/CHANGELOG from them). PRs need the `test` CI check green. Merging the release-please PR creates a GitHub Release, which triggers the Marketplace publish (`VSCE_PAT` secret). Pre-commit hook runs lint-staged (ESLint + Prettier) and commit-msg hook runs commitlint.
