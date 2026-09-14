@@ -3,6 +3,13 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0](https://github.com/SashaBusinaro/yaml-compose-sorter/compare/v1.0.2...v1.1.0) (2026-09-14)
+
+
+### Features
+
+* support grouped service sorting, Jinja2 templates, and fix boundary spacing ([#54](https://github.com/SashaBusinaro/yaml-compose-sorter/issues/54), [#34](https://github.com/SashaBusinaro/yaml-compose-sorter/issues/34), [#45](https://github.com/SashaBusinaro/yaml-compose-sorter/issues/45)) ([b0a4100](https://github.com/SashaBusinaro/yaml-compose-sorter/commit/b0a41000a45d43c60fe083656aee60d323862aee))
+
 ## [1.0.2](https://github.com/SashaBusinaro/yaml-compose-sorter/compare/v1.0.1...v1.0.2) (2026-06-14)
 
 
