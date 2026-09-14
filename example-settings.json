@@ -24,6 +24,17 @@
     "labels",
     "healthcheck"
   ],
+  "yaml-compose-sorter.serviceKeyGroups": [
+    ["container_name"],
+    ["image", "build"],
+    ["restart", "depends_on"],
+    ["ports", "expose"],
+    ["volumes"],
+    ["environment", "env_file"],
+    ["networks"],
+    ["labels", "healthcheck"]
+  ],
+  "yaml-compose-sorter.useServiceKeyGroups": false,
   "yaml-compose-sorter.addDocumentSeparator": false,
   "yaml-compose-sorter.addBlankLinesBetweenTopLevelKeys": true,
   "yaml-compose-sorter.removeVersionKey": false,

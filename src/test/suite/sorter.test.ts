@@ -3,6 +3,17 @@ import { expect } from "chai";
 import { DockerComposeSorter, SorterConfig } from "../../extension";
 
 suite("DockerComposeSorter Test Suite", () => {
+  const DEFAULT_SERVICE_KEY_GROUPS: string[][] = [
+    ["container_name"],
+    ["image", "build"],
+    ["restart", "depends_on"],
+    ["ports", "expose"],
+    ["volumes"],
+    ["environment", "env_file"],
+    ["networks"],
+    ["labels", "healthcheck"]
+  ];
+
   const DEFAULT_CONFIG: SorterConfig = {
     topLevelKeyOrder: ["version", "name", "services", "volumes", "networks", "configs", "secrets"],
     serviceKeyOrder: [
@@ -20,6 +31,8 @@ suite("DockerComposeSorter Test Suite", () => {
       "labels",
       "healthcheck"
     ],
+    serviceKeyGroups: DEFAULT_SERVICE_KEY_GROUPS,
+    useServiceKeyGroups: false,
     addDocumentSeparator: false,
     addBlankLinesTopLevel: true,
     removeVersionKey: false,
@@ -119,6 +132,170 @@ services:
     expect(appleIdx).to.be.lessThan(zebraIdx);
   });
 
+  test("Sorts service keys by groups and separates populated groups", () => {
+    const input = `
+services:
+  app:
+    zebra: true
+    environment:
+      APP_ENV: production
+    command: ["start"]
+    build: .
+    hostname: app
+    image: node
+    container_name: app
+`;
+    const result = DockerComposeSorter.sort(
+      input,
+      cleanConfig({
+        useServiceKeyGroups: true,
+        serviceKeyGroups: [
+          ["container_name", "hostname"],
+          ["image", "build"],
+          ["command"],
+          ["environment"]
+        ],
+        addBlankLinesTopLevel: false,
+        addBlankLinesServices: false
+      })
+    );
+
+    const service = result.slice(result.indexOf("  app:"));
+    const orderedKeys = [
+      "container_name",
+      "hostname",
+      "image",
+      "build",
+      "command",
+      "environment",
+      "zebra"
+    ];
+    const keyPositions = orderedKeys.map((key) => service.indexOf(`${key}:`));
+
+    expect(keyPositions.every((position) => position >= 0)).to.be.true;
+    keyPositions.slice(1).forEach((position, index) => {
+      expect(keyPositions[index]).to.be.lessThan(position);
+    });
+    expect(service).to.contain("hostname: app\n\n    image: node");
+    expect(service).to.contain("build: .\n\n    command:");
+    expect(service).to.contain("\n\n    environment:");
+  });
+
+  test("Default groups separate populated groups in Compose services", () => {
+    const input = `
+services:
+  web:
+    environment:
+      NODE_ENV: production
+    ports: ["80:80"]
+    image: nginx
+    restart: always
+`;
+    const result = DockerComposeSorter.sort(
+      input,
+      cleanConfig({
+        useServiceKeyGroups: true,
+        addBlankLinesTopLevel: false,
+        addBlankLinesServices: false
+      })
+    );
+
+    expect(result).to.contain("image: nginx\n\n    restart: always");
+    expect(result).to.contain("restart: always\n\n    ports:");
+    expect(result).to.match(/ports:\s*\[\s*"80:80"\s*\]\n\n    environment:/);
+  });
+
+  test("Group mode takes precedence over serviceKeyOrder when enabled", () => {
+    const input = `
+services:
+  app:
+    container_name: app
+    image: node
+    command: ["start"]
+`;
+    const result = DockerComposeSorter.sort(
+      input,
+      cleanConfig({
+        useServiceKeyGroups: true,
+        serviceKeyOrder: ["command", "image", "container_name"],
+        serviceKeyGroups: [["container_name"], ["image"], ["command"]],
+        addBlankLinesTopLevel: false,
+        addBlankLinesServices: false
+      })
+    );
+
+    const service = result.slice(result.indexOf("  app:"));
+    expect(service.indexOf("container_name:")).to.be.lessThan(service.indexOf("image:"));
+    expect(service.indexOf("image:")).to.be.lessThan(service.indexOf("command:"));
+  });
+
+  test("Service key order remains active when group mode is disabled", () => {
+    const input = `
+services:
+  app:
+    container_name: app
+    image: node
+    command: ["start"]
+`;
+    const result = DockerComposeSorter.sort(
+      input,
+      cleanConfig({
+        useServiceKeyGroups: false,
+        serviceKeyOrder: ["command", "image", "container_name"],
+        serviceKeyGroups: [["container_name"], ["image"], ["command"]],
+        addBlankLinesTopLevel: false,
+        addBlankLinesServices: false
+      })
+    );
+
+    const service = result.slice(result.indexOf("  app:"));
+    expect(service.indexOf("command:")).to.be.lessThan(service.indexOf("image:"));
+    expect(service.indexOf("image:")).to.be.lessThan(service.indexOf("container_name:"));
+    expect(service).to.not.contain('command: ["start"]\n\n');
+  });
+
+  test("Grouped sorting is idempotent", () => {
+    const config = cleanConfig({
+      useServiceKeyGroups: true,
+      serviceKeyGroups: [["container_name"], ["image"], ["command"]],
+      addBlankLinesTopLevel: false,
+      addBlankLinesServices: false
+    });
+    const input = `
+services:
+  app:
+    command: ["start"]
+    image: node
+    container_name: app
+`;
+
+    const once = DockerComposeSorter.sort(input, config);
+    expect(DockerComposeSorter.sort(once, config)).to.equal(once);
+    expect(once).to.contain("container_name: app\n\n    image: node\n\n    command:");
+  });
+
+  test("Separates untracked service keys from configured groups", () => {
+    const input = `
+services:
+  app:
+    hostname: app
+    image: node
+    command: ["start"]
+`;
+    const result = DockerComposeSorter.sort(
+      input,
+      cleanConfig({
+        useServiceKeyGroups: true,
+        serviceKeyGroups: [["image"], ["command"]],
+        addBlankLinesTopLevel: false,
+        addBlankLinesServices: false
+      })
+    );
+
+    expect(result.indexOf("command:")).to.be.lessThan(result.indexOf("hostname:"));
+    expect(result).to.contain("\n\n    hostname: app");
+  });
+
   /*
    * ==========================================
    * 2. Defaults & Config Fallbacks
@@ -130,6 +307,7 @@ services:
     const emptyConfig: SorterConfig = {
       topLevelKeyOrder: [],
       serviceKeyOrder: [],
+      useServiceKeyGroups: false,
       addDocumentSeparator: false,
       addBlankLinesTopLevel: false,
       addBlankLinesServices: false,
@@ -466,8 +644,8 @@ services:
     image: nginx # comment
 version: "3.8"
 `;
-    const once = DockerComposeSorter.sort(input, cleanConfig());
-    const twice = DockerComposeSorter.sort(once, cleanConfig());
+    const once = DockerComposeSorter.sort(input, cleanConfig({ useServiceKeyGroups: false }));
+    const twice = DockerComposeSorter.sort(once, cleanConfig({ useServiceKeyGroups: false }));
     expect(twice).to.equal(once);
   });
 
@@ -504,14 +682,14 @@ networks:
   nginx-net:
     name: nginx-net
 `;
-    const once = DockerComposeSorter.sort(input, cleanConfig());
+    const once = DockerComposeSorter.sort(input, cleanConfig({ useServiceKeyGroups: false }));
     // Exactly one blank line between the comment and the next section.
     expect(once).to.equal(expected);
 
     // Re-running must not add further blank lines.
     let current = once;
     for (let i = 0; i < 4; i++) {
-      current = DockerComposeSorter.sort(current, cleanConfig());
+      current = DockerComposeSorter.sort(current, cleanConfig({ useServiceKeyGroups: false }));
       expect(current, `run ${i + 2} changed the output`).to.equal(once);
     }
   });

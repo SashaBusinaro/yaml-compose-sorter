@@ -24,6 +24,7 @@ A Visual Studio Code extension that automatically sorts, formats, and standardiz
 - **Native Formatting**: Works with the standard "Format Document" command and "Format On Save".
 - **Document Separator**: Optionally adds `---` at the beginning of YAML files.
 - **Visual Separation**: Adds blank lines between services and top-level blocks for better readability.
+- **Grouped Service Sorting**: Optionally organizes service keys into ordered groups with blank lines between groups.
 - **Key=Value Transformation**: Optionally converts legacy list syntax (e.g., in `labels`) to map syntax.
 - **Clean Up**: Optionally removes the deprecated `version` key.
 - **Custom Key Support**: Add custom keys to the `topLevelKeyOrder` or `serviceKeyOrder` arrays in your `settings.json` to include them in the sorting logic.
@@ -68,15 +69,37 @@ The extension activates automatically for:
 
 You can customize the sorting behavior in VS Code settings.
 
-| Setting                                                | Default                        | Description                                                                      |
-| ------------------------------------------------------ | ------------------------------ | -------------------------------------------------------------------------------- |
-| `yaml-compose-sorter.topLevelKeyOrder`                 | `[version, name, services...]` | Order of root keys (e.g., put `volumes` at the end).                             |
-| `yaml-compose-sorter.serviceKeyOrder`                  | `[container_name, image, ...]` | Order of keys inside a service definition.                                       |
-| `yaml-compose-sorter.addBlankLinesBetweenTopLevelKeys` | `true`                         | Adds a blank line between root blocks (e.g., between `services` and `networks`). |
-| `yaml-compose-sorter.addBlankLinesBetweenServices`     | `true`                         | Adds a blank line between each service definition.                               |
-| `yaml-compose-sorter.addDocumentSeparator`             | `false`                        | Ensures the file starts with `---`.                                              |
-| `yaml-compose-sorter.removeVersionKey`                 | `false`                        | Removes the `version` key (deprecated in recent Compose specs).                  |
-| `yaml-compose-sorter.transformKeyValueLists`           | `false`                        | Converts array syntax to map syntax (see example below).                         |
+| Setting                                                | Default                          | Description                                                                      |
+| ------------------------------------------------------ | -------------------------------- | -------------------------------------------------------------------------------- |
+| `yaml-compose-sorter.topLevelKeyOrder`                 | `[version, name, services...]`   | Order of root keys (e.g., put `volumes` at the end).                             |
+| `yaml-compose-sorter.serviceKeyOrder`                  | `[container_name, image, ...]`   | Order of keys inside a service definition.                                       |
+| `yaml-compose-sorter.serviceKeyGroups`                 | `[[container_name], [image...]]` | Ordered service-key groups used when group mode is enabled.                      |
+| `yaml-compose-sorter.useServiceKeyGroups`              | `false`                          | Uses `serviceKeyGroups` instead of `serviceKeyOrder` when groups are configured. |
+| `yaml-compose-sorter.addBlankLinesBetweenTopLevelKeys` | `true`                           | Adds a blank line between root blocks (e.g., between `services` and `networks`). |
+| `yaml-compose-sorter.addBlankLinesBetweenServices`     | `true`                           | Adds a blank line between each service definition.                               |
+| `yaml-compose-sorter.addDocumentSeparator`             | `false`                          | Ensures the file starts with `---`.                                              |
+| `yaml-compose-sorter.removeVersionKey`                 | `false`                          | Removes the `version` key (deprecated in recent Compose specs).                  |
+| `yaml-compose-sorter.transformKeyValueLists`           | `false`                          | Converts array syntax to map syntax (see example below).                         |
+
+### Grouped Service Keys
+
+The default groups mirror the existing `serviceKeyOrder` exactly, without moving any keys. To customize them, set `serviceKeyGroups` to a list of key lists and enable `useServiceKeyGroups`. Groups are processed in declaration order, keys within each group follow their listed order, and unlisted keys are sorted alphabetically after the groups. A blank line is inserted between populated groups. The list format makes the setting override cleanly across VS Code configuration scopes instead of merging named object properties.
+
+```json
+"yaml-compose-sorter.serviceKeyGroups": [
+  ["container_name"],
+  ["image", "build"],
+  ["restart", "depends_on"],
+  ["ports", "expose"],
+  ["volumes"],
+  ["environment", "env_file"],
+  ["networks"],
+  ["labels", "healthcheck"]
+],
+"yaml-compose-sorter.useServiceKeyGroups": true
+```
+
+Grouped service sorting is disabled by default. Set `useServiceKeyGroups` to `true` to use the grouped order and insert blank lines between populated groups.
 
 ### Feature Spotlight: Key=Value Transformation
 

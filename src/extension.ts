@@ -15,6 +15,8 @@ const DOCKER_COMPOSE_SELECTOR: vscode.DocumentSelector = [
 export interface SorterConfig {
   topLevelKeyOrder: string[];
   serviceKeyOrder: string[];
+  serviceKeyGroups?: string[][];
+  useServiceKeyGroups: boolean;
   addDocumentSeparator: boolean;
   addBlankLinesTopLevel: boolean;
   addBlankLinesServices: boolean;
@@ -101,9 +103,15 @@ class DockerComposeFormattingProvider implements vscode.DocumentFormattingEditPr
 
   private getConfiguration(): SorterConfig {
     const config = vscode.workspace.getConfiguration("yaml-compose-sorter");
+    const serviceKeyGroups = config.get<string[][]>("serviceKeyGroups") ?? [];
+    const serviceKeyOrder = config.get<string[]>("serviceKeyOrder") ?? [];
+    const useServiceKeyGroups = config.get<boolean>("useServiceKeyGroups") ?? false;
+
     return {
       topLevelKeyOrder: config.get<string[]>("topLevelKeyOrder") ?? [],
-      serviceKeyOrder: config.get<string[]>("serviceKeyOrder") ?? [],
+      serviceKeyOrder,
+      serviceKeyGroups,
+      useServiceKeyGroups,
       addDocumentSeparator: config.get<boolean>("addDocumentSeparator") ?? false,
       addBlankLinesTopLevel: config.get<boolean>("addBlankLinesBetweenTopLevelKeys") ?? true,
       removeVersionKey: config.get<boolean>("removeVersionKey") ?? false,
@@ -175,11 +183,18 @@ export class DockerComposeSorter {
     this.sortMap(contents, config.topLevelKeyOrder, true);
 
     // 3. Process Services
+    const serviceKeyGroups = config.useServiceKeyGroups
+      ? this.getServiceKeyGroups(config)
+      : undefined;
     const services = contents.get("services");
     if (services && yaml.isMap(services)) {
       services.items.forEach((pair) => {
         if (yaml.isMap(pair.value)) {
-          this.sortMap(pair.value as yaml.YAMLMap, config.serviceKeyOrder);
+          if (serviceKeyGroups) {
+            this.sortMapByGroups(pair.value as yaml.YAMLMap, serviceKeyGroups);
+          } else {
+            this.sortMap(pair.value as yaml.YAMLMap, config.serviceKeyOrder);
+          }
         }
       });
     }
@@ -190,7 +205,7 @@ export class DockerComposeSorter {
     }
 
     // 5. Apply Spacing
-    this.applySpacing(contents, config);
+    this.applySpacing(contents, config, serviceKeyGroups);
 
     // 6. Serialize
     return doc.toString(stringifyOptions);
@@ -235,6 +250,54 @@ export class DockerComposeSorter {
 
       return keyA.localeCompare(keyB);
     });
+  }
+
+  private static getServiceKeyGroups(config: SorterConfig): string[][] | undefined {
+    const groups = config.serviceKeyGroups;
+    return groups && groups.length > 0 ? groups : undefined;
+  }
+
+  private static sortMapByGroups(map: yaml.YAMLMap, groups: string[][]): void {
+    const keyOrder = this.createGroupKeyOrder(groups);
+
+    map.items.sort((a, b) => {
+      const keyA = String(a.key);
+      const keyB = String(b.key);
+
+      const positionA = keyOrder.get(keyA);
+      const positionB = keyOrder.get(keyB);
+
+      if (positionA && positionB) {
+        if (positionA.groupIndex !== positionB.groupIndex) {
+          return positionA.groupIndex - positionB.groupIndex;
+        }
+        return positionA.keyIndex - positionB.keyIndex;
+      }
+      if (positionA) {
+        return -1;
+      }
+      if (positionB) {
+        return 1;
+      }
+
+      return keyA.localeCompare(keyB);
+    });
+  }
+
+  private static createGroupKeyOrder(
+    groups: string[][]
+  ): Map<string, { groupIndex: number; keyIndex: number }> {
+    const keyOrder = new Map<string, { groupIndex: number; keyIndex: number }>();
+
+    groups.forEach((keys, groupIndex) => {
+      keys.forEach((key, keyIndex) => {
+        if (!keyOrder.has(key)) {
+          keyOrder.set(key, { groupIndex, keyIndex });
+        }
+      });
+    });
+
+    return keyOrder;
   }
 
   private static transformListsToMaps(doc: yaml.Document): void {
@@ -300,7 +363,11 @@ export class DockerComposeSorter {
     return map;
   }
 
-  private static applySpacing(contents: yaml.YAMLMap, config: SorterConfig): void {
+  private static applySpacing(
+    contents: yaml.YAMLMap,
+    config: SorterConfig,
+    serviceKeyGroups?: string[][]
+  ): void {
     const resetSpacing = (node: any) => {
       if (node && node.key) {
         node.key.spaceBefore = false;
@@ -320,9 +387,9 @@ export class DockerComposeSorter {
     }
 
     // Service Level Spacing
-    if (config.addBlankLinesServices) {
-      const services = contents.get("services");
-      if (services && yaml.isMap(services)) {
+    const services = contents.get("services");
+    if (services && yaml.isMap(services)) {
+      if (config.addBlankLinesServices) {
         services.items.forEach((item, index) => {
           if (index > 0 && yaml.isScalar(item.key)) {
             item.key.spaceBefore = true;
@@ -330,7 +397,41 @@ export class DockerComposeSorter {
           }
         });
       }
+
+      if (serviceKeyGroups) {
+        services.items.forEach((item) => {
+          if (yaml.isMap(item.value)) {
+            this.applyGroupSpacing(item.value as yaml.YAMLMap, serviceKeyGroups);
+          }
+        });
+      }
     }
+  }
+
+  private static applyGroupSpacing(map: yaml.YAMLMap, groups: string[][]): void {
+    const keyOrder = this.createGroupKeyOrder(groups);
+    let previousGroupIndex: number | undefined;
+
+    map.items.forEach((item, index) => {
+      if (!yaml.isScalar(item.key)) {
+        previousGroupIndex = undefined;
+        return;
+      }
+
+      item.key.spaceBefore = false;
+      const groupPosition = keyOrder.get(String(item.key));
+      const groupIndex = groupPosition?.groupIndex;
+
+      const startsUntrackedSection = groupIndex === undefined && previousGroupIndex !== undefined;
+      const startsConfiguredGroup = groupIndex !== undefined && groupIndex !== previousGroupIndex;
+
+      if (index > 0 && (startsConfiguredGroup || startsUntrackedSection)) {
+        item.key.spaceBefore = true;
+        this.stripBoundaryCommentBlanks(map.items[index - 1].value);
+      }
+
+      previousGroupIndex = groupIndex;
+    });
   }
 
   /**
