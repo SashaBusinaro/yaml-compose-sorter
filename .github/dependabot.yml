@@ -11,6 +11,10 @@ updates:
       # version), never the latest release: bumping it above engines.vscode
       # makes `vsce publish` reject the package.
       - dependency-name: "@types/vscode"
+      # TypeScript major updates are held back until @typescript-eslint supports them
+      - dependency-name: "typescript"
+        update-types:
+          - "version-update:semver-major"
     groups:
       dev-dependencies:
         dependency-type: development
