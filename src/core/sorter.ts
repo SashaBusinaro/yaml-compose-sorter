@@ -29,19 +29,25 @@ export class DockerComposeSorter {
       return yamlText;
     }
 
-    let output = docs
-      .map((doc) => this.processDocument(doc, config, indent))
-      .map((text, index) => (index > 0 && !text.startsWith("---") ? `---\n${text}` : text))
+    const output = docs
+      .map((doc, index) => this.processDocument(doc, config, indent, index > 0))
       .join("");
-
-    if (config.addDocumentSeparator && !output.startsWith("---")) {
-      output = "---\n" + output;
-    }
 
     return usesCrlf ? output.replace(/\n/g, "\r\n") : output;
   }
 
-  private static processDocument(doc: yaml.Document, config: SorterConfig, indent: number): string {
+  private static processDocument(
+    doc: yaml.Document,
+    config: SorterConfig,
+    indent: number,
+    isSubsequentDocument: boolean = false
+  ): string {
+    if (config.addDocumentSeparator || isSubsequentDocument) {
+      if (doc.directives) {
+        doc.directives.docStart = true;
+      }
+    }
+
     const stringifyOptions: yaml.ToStringOptions = {
       lineWidth: 0,
       minContentWidth: 0,
@@ -109,19 +115,6 @@ export class DockerComposeSorter {
       const idxA = order.indexOf(keyA);
       const idxB = order.indexOf(keyB);
 
-      // Prioritize YAML merge keys ("<<") to the top of mappings unless explicitly ordered
-      const isMergeA = keyA === "<<" && idxA === -1;
-      const isMergeB = keyB === "<<" && idxB === -1;
-      if (isMergeA && isMergeB) {
-        return 0;
-      }
-      if (isMergeA) {
-        return -1;
-      }
-      if (isMergeB) {
-        return 1;
-      }
-
       // Extension fields (x-*) usually hold YAML anchors, so they must stay
       // before the keys that reference them. Keep their original relative
       // order (anchors may reference each other) unless explicitly configured.
@@ -134,6 +127,19 @@ export class DockerComposeSorter {
         return -1;
       }
       if (extB) {
+        return 1;
+      }
+
+      // Prioritize YAML merge keys ("<<") to the top of mappings unless explicitly ordered
+      const isMergeA = keyA === "<<" && idxA === -1;
+      const isMergeB = keyB === "<<" && idxB === -1;
+      if (isMergeA && isMergeB) {
+        return 0;
+      }
+      if (isMergeA) {
+        return -1;
+      }
+      if (isMergeB) {
         return 1;
       }
 
@@ -263,6 +269,7 @@ export class DockerComposeSorter {
     if (seq.items.length === 0) {
       return false;
     }
+    const seenKeys = new Set<string>();
     return seq.items.every((item) => {
       if (!yaml.isScalar(item) || typeof item.value !== "string") {
         return false;
@@ -270,7 +277,15 @@ export class DockerComposeSorter {
       const str = item.value;
       const eqIndex = str.indexOf("=");
       // Must contain '=' and have a non-empty key before '='
-      return eqIndex > 0 && str.slice(0, eqIndex).trim().length > 0;
+      if (eqIndex <= 0 || str.slice(0, eqIndex).trim().length === 0) {
+        return false;
+      }
+      const key = str.slice(0, eqIndex).trim();
+      if (seenKeys.has(key)) {
+        return false;
+      }
+      seenKeys.add(key);
+      return true;
     });
   }
 

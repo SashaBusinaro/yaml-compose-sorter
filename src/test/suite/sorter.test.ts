@@ -961,4 +961,50 @@ services:
     assert.ok(result.includes('- "--config=/app/config.yaml"'));
     assert.ok(result.includes('- "--log-level=debug"'));
   });
+
+  test("Merge keys (<<) after top-level anchors preserve anchor declaration before alias", () => {
+    const input = `x-base: &base
+  name: shared
+
+<<: *base
+
+services:
+  web:
+    image: nginx
+`;
+    const result = DockerComposeSorter.sort(input, cleanConfig());
+    const anchorIdx = result.indexOf("x-base: &base");
+    const mergeIdx = result.indexOf("<<: *base");
+    assert.ok(anchorIdx !== -1, "Expected anchor to be present");
+    assert.ok(mergeIdx !== -1, "Expected merge key to be present");
+    assert.ok(anchorIdx < mergeIdx, "Expected anchor declaration to precede merge key alias");
+  });
+
+  test("Transform: refuses sequences with duplicate keys to prevent map key collision", () => {
+    const input = `services:
+  app:
+    environment:
+      - FOO=1
+      - FOO=2
+`;
+    // Should safely leave the sequence untouched rather than throwing or dropping keys
+    const result = DockerComposeSorter.sort(input, cleanConfig({ transformKeyValueLists: true }));
+    assert.ok(result.includes("- FOO=1"), "Expected FOO=1 sequence item to be preserved");
+    assert.ok(result.includes("- FOO=2"), "Expected FOO=2 sequence item to be preserved");
+  });
+
+  test("Feature: addDocumentSeparator = true does not duplicate existing separator after comments", () => {
+    const input = `# File-level header comment
+---
+services:
+  web:
+    image: nginx
+`;
+    const result = DockerComposeSorter.sort(input, cleanConfig({ addDocumentSeparator: true }));
+    const matches = result.match(/---/g);
+    assert.strictEqual(matches?.length, 1, "Expected exactly one document separator");
+    const commentIdx = result.indexOf("# File-level header comment");
+    const sepIdx = result.indexOf("---");
+    assert.ok(commentIdx !== -1 && sepIdx !== -1);
+  });
 });

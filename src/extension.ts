@@ -44,12 +44,13 @@ export function activate(context: vscode.ExtensionContext): void {
 
       const document = editor.document;
       const text = document.getText();
-      const config = formatter.getConfiguration();
+      const config = formatter.getConfiguration(document);
+      const parsedTabSize = Number(editor.options.tabSize);
       const indent =
         editor.options.insertSpaces !== false &&
-        typeof editor.options.tabSize === "number" &&
-        editor.options.tabSize > 0
-          ? editor.options.tabSize
+        Number.isInteger(parsedTabSize) &&
+        parsedTabSize > 0
+          ? parsedTabSize
           : 2;
 
       try {
@@ -96,7 +97,7 @@ export class DockerComposeFormattingProvider implements vscode.DocumentFormattin
     }
 
     const text = document.getText();
-    const config = this.getConfiguration();
+    const config = this.getConfiguration(document);
     // YAML forbids tab indentation, so fall back to 2 spaces when tabs are requested
     const indent =
       options.insertSpaces && Number.isInteger(options.tabSize) && options.tabSize > 0
@@ -123,8 +124,8 @@ export class DockerComposeFormattingProvider implements vscode.DocumentFormattin
     }
   }
 
-  public getConfiguration(): SorterConfig {
-    const config = vscode.workspace.getConfiguration("yaml-compose-sorter");
+  public getConfiguration(scope?: vscode.ConfigurationScope): SorterConfig {
+    const config = vscode.workspace.getConfiguration("yaml-compose-sorter", scope);
     return {
       topLevelKeyOrder: config.get<string[]>("topLevelKeyOrder") ?? DEFAULT_CONFIG.topLevelKeyOrder,
       serviceKeyOrder: config.get<string[]>("serviceKeyOrder") ?? DEFAULT_CONFIG.serviceKeyOrder,
