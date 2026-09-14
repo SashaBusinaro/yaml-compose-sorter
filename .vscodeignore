@@ -19,3 +19,5 @@ vsc-extension-quickstart.md
 **/*.ts
 **/.vscode-test.*
 *.vsix
+commitlint.config.mjs
+CLAUDE.md
