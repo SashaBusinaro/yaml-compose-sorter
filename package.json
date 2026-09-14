@@ -40,7 +40,9 @@
   },
   "activationEvents": [
     "onLanguage:yaml",
-    "onLanguage:dockercompose"
+    "onLanguage:dockercompose",
+    "onLanguage:jinja",
+    "onLanguage:jinja-yaml"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -84,6 +86,57 @@
             "healthcheck"
           ],
           "description": "Order of keys within each service definition"
+        },
+        "yaml-compose-sorter.serviceKeyGroups": {
+          "type": "array",
+          "default": [
+            [
+              "container_name"
+            ],
+            [
+              "image",
+              "build"
+            ],
+            [
+              "restart",
+              "depends_on"
+            ],
+            [
+              "ports",
+              "expose"
+            ],
+            [
+              "volumes"
+            ],
+            [
+              "environment",
+              "env_file"
+            ],
+            [
+              "networks"
+            ],
+            [
+              "labels",
+              "healthcheck"
+            ]
+          ],
+          "description": "Ordered groups of service keys. Used when useServiceKeyGroups is enabled, with blank lines between populated groups.",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "yaml-compose-sorter.useServiceKeyGroups": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use service key groups instead of serviceKeyOrder when groups are configured"
+        },
+        "yaml-compose-sorter.preserveBlankLinesWithinServiceKeyGroups": {
+          "type": "boolean",
+          "default": true,
+          "description": "Preserve blank lines within configured service-key groups and between unknown service keys"
         },
         "yaml-compose-sorter.addDocumentSeparator": {
           "type": "boolean",
