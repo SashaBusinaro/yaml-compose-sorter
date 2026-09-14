@@ -1,4 +1,4 @@
-import { expect } from "chai";
+import assert from "node:assert/strict";
 import * as vscode from "vscode";
 import { DockerComposeSorter, DOCKER_COMPOSE_SELECTOR, SorterConfig } from "../../extension";
 
@@ -64,8 +64,8 @@ suite("Adversary Test Suite", () => {
     image: node:20
 `;
       const result = DockerComposeSorter.sort(input, createConfig());
-      expect(result).to.contain("TARGET_ENV:\n\n  api:");
-      expect(result).to.not.contain("TARGET_ENV:\n\n\n");
+      assert.ok(result.includes("TARGET_ENV:\n\n  api:"));
+      assert.ok(!result.includes("TARGET_ENV:\n\n\n"));
     });
 
     test("Multiple consecutive null scalars in service mapping", () => {
@@ -80,8 +80,8 @@ suite("Adversary Test Suite", () => {
     image: redis:alpine
 `;
       const result = DockerComposeSorter.sort(input, createConfig());
-      expect(result).to.contain("net_c:\n\n  worker:");
-      expect(result).to.not.contain("net_c:\n\n\n");
+      assert.ok(result.includes("net_c:\n\n  worker:"));
+      assert.ok(!result.includes("net_c:\n\n\n"));
     });
 
     test("Sequence ending with null scalar before next service", () => {
@@ -96,8 +96,8 @@ suite("Adversary Test Suite", () => {
     image: redis:alpine
 `;
       const result = DockerComposeSorter.sort(input, createConfig());
-      expect(result).to.contain("- \n\n  worker:");
-      expect(result).to.not.contain("- \n\n\n");
+      assert.ok(result.includes("- \n\n  worker:"));
+      assert.ok(!result.includes("- \n\n\n"));
     });
 
     test("Trailing null scalar with inline comment followed by sibling service", () => {
@@ -111,9 +111,11 @@ suite("Adversary Test Suite", () => {
 `;
       const once = DockerComposeSorter.sort(input, createConfig());
       const twice = DockerComposeSorter.sort(once, createConfig());
-      expect(twice).to.equal(once);
-      expect(once).to.contain("isolated_nw: # inline comment on trailing null scalar\n\n  worker:");
-      expect(once).to.not.contain("isolated_nw: # inline comment on trailing null scalar\n\n\n");
+      assert.strictEqual(twice, once);
+      assert.ok(
+        once.includes("isolated_nw: # inline comment on trailing null scalar\n\n  worker:")
+      );
+      assert.ok(!once.includes("isolated_nw: # inline comment on trailing null scalar\n\n\n"));
     });
 
     test("Trailing null scalar at group boundary with useServiceKeyGroups=true", () => {
@@ -131,9 +133,9 @@ suite("Adversary Test Suite", () => {
       });
       const once = DockerComposeSorter.sort(input, config);
       const twice = DockerComposeSorter.sort(once, config);
-      expect(twice).to.equal(once);
-      expect(once).to.contain("image: node:20\n    build:\n\n    ports:");
-      expect(once).to.not.contain("build:\n\n\n");
+      assert.strictEqual(twice, once);
+      assert.ok(once.includes("image: node:20\n    build:\n\n    ports:"));
+      assert.ok(!once.includes("build:\n\n\n"));
     });
 
     test("Top-level section ending with null scalar before next section", () => {
@@ -154,8 +156,8 @@ volumes:
         input,
         createConfig({ topLevelKeyOrder: ["version", "services", "networks", "volumes"] })
       );
-      expect(result).to.contain("backend:\n\nvolumes:");
-      expect(result).to.not.contain("backend:\n\n\n");
+      assert.ok(result.includes("backend:\n\nvolumes:"));
+      assert.ok(!result.includes("backend:\n\n\n"));
     });
 
     test("Deep idempotency loop (10 runs) on multi-section file with null scalars", () => {
@@ -182,11 +184,11 @@ volumes:
       for (let i = 0; i < 10; i++) {
         const next = DockerComposeSorter.sort(current, createConfig());
         if (i > 0) {
-          expect(next, `Run ${i + 1} diverged from previous output`).to.equal(current);
+          assert.strictEqual(next, current, `Run ${i + 1} diverged from previous output`);
         }
         current = next;
       }
-      expect(current).to.not.contain("\n\n\n");
+      assert.ok(!current.includes("\n\n\n"));
     });
 
     test("addBlankLinesServices=false preserves tight service spacing with null scalars", () => {
@@ -201,8 +203,8 @@ volumes:
         input,
         createConfig({ addBlankLinesServices: false })
       );
-      expect(result).to.contain("outbound:\n  worker:");
-      expect(result).to.not.contain("outbound:\n\n");
+      assert.ok(result.includes("outbound:\n  worker:"));
+      assert.ok(!result.includes("outbound:\n\n"));
     });
   });
 
@@ -232,8 +234,8 @@ volumes:
       const imgIdx = service.indexOf("image:");
       const cmdIdx = service.indexOf("command:");
 
-      expect(portsIdx).to.be.lessThan(imgIdx);
-      expect(imgIdx).to.be.lessThan(cmdIdx);
+      assert.ok(portsIdx < imgIdx);
+      assert.ok(imgIdx < cmdIdx);
     });
 
     test("Custom groups containing empty sub-arrays", () => {
@@ -250,8 +252,8 @@ volumes:
         addBlankLinesServices: false
       });
       const result = DockerComposeSorter.sort(input, config);
-      expect(result).to.contain("image: node:20\n\n    environment:");
-      expect(result).to.not.contain("image: node:20\n\n\n");
+      assert.ok(result.includes("image: node:20\n\n    environment:"));
+      assert.ok(!result.includes("image: node:20\n\n\n"));
     });
 
     test("Untracked service keys are sorted alphabetically after configured groups", () => {
@@ -276,11 +278,11 @@ volumes:
       const mIdx = service.indexOf("m_custom:");
       const zIdx = service.indexOf("z_custom:");
 
-      expect(imgIdx).to.be.lessThan(aIdx);
-      expect(aIdx).to.be.lessThan(mIdx);
-      expect(mIdx).to.be.lessThan(zIdx);
+      assert.ok(imgIdx < aIdx);
+      assert.ok(aIdx < mIdx);
+      assert.ok(mIdx < zIdx);
       // Group separation before the untracked section
-      expect(service).to.contain("image: node:20\n\n    a_custom:");
+      assert.ok(service.includes("image: node:20\n\n    a_custom:"));
     });
 
     test("Multiple untracked keys with preserveBlankLinesWithinServiceKeyGroups=false strips internal blanks", () => {
@@ -299,8 +301,8 @@ volumes:
         addBlankLinesServices: false
       });
       const result = DockerComposeSorter.sort(input, config);
-      expect(result).to.contain("a_unknown: 2\n    b_unknown: 1");
-      expect(result).to.not.contain("a_unknown: 2\n\n    b_unknown: 1");
+      assert.ok(result.includes("a_unknown: 2\n    b_unknown: 1"));
+      assert.ok(!result.includes("a_unknown: 2\n\n    b_unknown: 1"));
     });
 
     test("Sparse groups (first and last populated, all middle empty) have single blank line separation", () => {
@@ -317,8 +319,8 @@ volumes:
         addBlankLinesServices: false
       });
       const result = DockerComposeSorter.sort(input, config);
-      expect(result).to.contain("container_name: web-app\n\n    healthcheck:");
-      expect(result).to.not.contain("container_name: web-app\n\n\n");
+      assert.ok(result.includes("container_name: web-app\n\n    healthcheck:"));
+      assert.ok(!result.includes("container_name: web-app\n\n\n"));
     });
 
     test("Grouped sorting combined with transformKeyValueLists=true", () => {
@@ -338,11 +340,9 @@ volumes:
         addBlankLinesServices: false
       });
       const result = DockerComposeSorter.sort(input, config);
-      expect(result).to.contain("container_name: app\n\n    image: node:20\n\n    environment:");
-      expect(result).to.satisfy(
-        (s: string) => s.includes("APP_PORT: 8080") || s.includes('APP_PORT: "8080"')
-      );
-      expect(result).to.contain("APP_HOST: 0.0.0.0");
+      assert.ok(result.includes("container_name: app\n\n    image: node:20\n\n    environment:"));
+      assert.ok(result.includes("APP_PORT: 8080") || result.includes('APP_PORT: "8080"'));
+      assert.ok(result.includes("APP_HOST: 0.0.0.0"));
     });
 
     test("10-iteration idempotency loop on grouped service sorting", () => {
@@ -372,7 +372,7 @@ volumes:
       for (let i = 0; i < 10; i++) {
         const next = DockerComposeSorter.sort(current, config);
         if (i > 0) {
-          expect(next, `Grouped sorting diverged on iteration ${i + 1}`).to.equal(current);
+          assert.strictEqual(next, current, `Grouped sorting diverged on iteration ${i + 1}`);
         }
         current = next;
       }
@@ -400,9 +400,9 @@ volumes:
       const portsIdx = result.indexOf("ports:");
       const portsCommentIdx = result.indexOf("# Port mappings comment");
 
-      expect(restartCommentIdx).to.be.lessThan(restartIdx);
-      expect(restartIdx).to.be.lessThan(portsCommentIdx);
-      expect(portsCommentIdx).to.be.lessThan(portsIdx);
+      assert.ok(restartCommentIdx < restartIdx);
+      assert.ok(restartIdx < portsCommentIdx);
+      assert.ok(portsCommentIdx < portsIdx);
     });
 
     test("Trailing comments at group boundaries don't cause double blank line stacking", () => {
@@ -422,8 +422,8 @@ volumes:
       });
       const once = DockerComposeSorter.sort(input, config);
       const twice = DockerComposeSorter.sort(once, config);
-      expect(twice).to.equal(once);
-      expect(once).to.not.contain("\n\n\n");
+      assert.strictEqual(twice, once);
+      assert.ok(!once.includes("\n\n\n"));
     });
   });
 
@@ -459,10 +459,7 @@ volumes:
       for (const f of files) {
         const doc = { uri: vscode.Uri.file(f.path), languageId: f.lang };
         const score = vscode.languages.match(DOCKER_COMPOSE_SELECTOR, doc as any);
-        expect(
-          score,
-          `Expected DOCKER_COMPOSE_SELECTOR to match: ${f.path} (${f.lang})`
-        ).to.be.greaterThan(0);
+        assert.ok(score > 0, `Expected DOCKER_COMPOSE_SELECTOR to match: ${f.path} (${f.lang})`);
       }
     });
 
@@ -486,11 +483,11 @@ volumes:
       const portsIdx = web.indexOf("ports:");
       const envIdx = web.indexOf("environment:");
 
-      expect(cNameIdx).to.be.lessThan(imgIdx);
-      expect(imgIdx).to.be.lessThan(portsIdx);
-      expect(portsIdx).to.be.lessThan(envIdx);
-      expect(result).to.contain('"{{ env_port | default(3000) }}"');
-      expect(result).to.contain('"{{ (host_port | int) + 1 }}:{{ container_port }}"');
+      assert.ok(cNameIdx < imgIdx);
+      assert.ok(imgIdx < portsIdx);
+      assert.ok(portsIdx < envIdx);
+      assert.ok(result.includes('"{{ env_port | default(3000) }}"'));
+      assert.ok(result.includes('"{{ (host_port | int) + 1 }}:{{ container_port }}"'));
     });
 
     test("Jinja2 template sorting is strictly idempotent over multiple runs", () => {
@@ -505,7 +502,7 @@ volumes:
       for (let i = 0; i < 5; i++) {
         const next = DockerComposeSorter.sort(current, createConfig());
         if (i > 0) {
-          expect(next).to.equal(current);
+          assert.strictEqual(next, current);
         }
         current = next;
       }
@@ -521,9 +518,9 @@ volumes:
       - "80:80"
     {% endif %}
 `;
-      expect(() => {
+      assert.throws(() => {
         DockerComposeSorter.sort(input, createConfig());
-      }).to.throw(/Invalid YAML/);
+      }, /Invalid YAML/);
     });
   });
 
@@ -550,10 +547,10 @@ volumes:
       });
 
       const result = DockerComposeSorter.sort(input, config);
-      expect(result).to.contain("\r\n");
-      expect(result.replace(/\r\n/g, "")).to.not.contain("\n");
-      expect(result).to.contain("default:\r\n\r\n  api:");
-      expect(result).to.not.contain("default:\r\n\r\n\r\n");
+      assert.ok(result.includes("\r\n"));
+      assert.ok(!result.replace(/\r\n/g, "").includes("\n"));
+      assert.ok(result.includes("default:\r\n\r\n  api:"));
+      assert.ok(!result.includes("default:\r\n\r\n\r\n"));
     });
 
     test("Multi-document YAML file with grouped sorting and document separator", () => {
@@ -576,10 +573,10 @@ services:
       });
 
       const result = DockerComposeSorter.sort(input, config);
-      expect(result.startsWith("---\n")).to.be.true;
-      expect(result.match(/---/g)).to.have.lengthOf(2);
-      expect(result).to.contain("container_name: web\n\n    image: nginx");
-      expect(result).to.contain("container_name: db\n\n    image: postgres");
+      assert.ok(result.startsWith("---\n"));
+      assert.strictEqual(result.match(/---/g)?.length, 2);
+      assert.ok(result.includes("container_name: web\n\n    image: nginx"));
+      assert.ok(result.includes("container_name: db\n\n    image: postgres"));
     });
 
     test("YAML Anchors and merge keys across grouped services", () => {
@@ -599,9 +596,9 @@ services:
       });
       const once = DockerComposeSorter.sort(input, config);
       const twice = DockerComposeSorter.sort(once, config);
-      expect(twice).to.equal(once);
-      expect(once).to.contain("&base");
-      expect(once).to.contain("container_name: app\n\n    image: node:20\n\n    environment:");
+      assert.strictEqual(twice, once);
+      assert.ok(once.includes("&base"));
+      assert.ok(once.includes("container_name: app\n\n    image: node:20\n\n    environment:"));
     });
 
     test("YAML merge key (<<: *base) inside service with useServiceKeyGroups=true", () => {
@@ -622,9 +619,9 @@ services:
       });
       const once = DockerComposeSorter.sort(input, config);
       const twice = DockerComposeSorter.sort(once, config);
-      expect(twice).to.equal(once);
-      expect(once).to.contain("<<: *base");
-      expect(once).to.contain("container_name: app\n\n    image: node:20\n\n    environment:");
+      assert.strictEqual(twice, once);
+      assert.ok(once.includes("<<: *base"));
+      assert.ok(once.includes("container_name: app\n\n    image: node:20\n\n    environment:"));
     });
 
     test("Empty service declaration (null scalar service) followed by standard service", () => {
@@ -636,9 +633,9 @@ services:
 `;
       const once = DockerComposeSorter.sort(input, createConfig());
       const twice = DockerComposeSorter.sort(once, createConfig());
-      expect(twice).to.equal(once);
-      expect(once).to.contain("empty_service:\n\n  worker:");
-      expect(once).to.not.contain("empty_service:\n\n\n");
+      assert.strictEqual(twice, once);
+      assert.ok(once.includes("empty_service:\n\n  worker:"));
+      assert.ok(!once.includes("empty_service:\n\n\n"));
     });
 
     test("Top-level section with inline comment and null value followed by next section", () => {
@@ -659,9 +656,9 @@ networks:
         once,
         createConfig({ topLevelKeyOrder: ["services", "volumes", "networks"] })
       );
-      expect(twice).to.equal(once);
-      expect(once).to.contain("volumes: # no persistent volumes yet\n\nnetworks:");
-      expect(once).to.not.contain("volumes: # no persistent volumes yet\n\n\n");
+      assert.strictEqual(twice, once);
+      assert.ok(once.includes("volumes: # no persistent volumes yet\n\nnetworks:"));
+      assert.ok(!once.includes("volumes: # no persistent volumes yet\n\n\n"));
     });
 
     test("Grouped sorting with preserveBlankLinesWithinServiceKeyGroups=false preserves intra-group comments", () => {
@@ -679,7 +676,7 @@ networks:
         addBlankLinesServices: false
       });
       const result = DockerComposeSorter.sort(input, config);
-      expect(result).to.contain("image: node:20\n    # build config below\n    build: .");
+      assert.ok(result.includes("image: node:20\n    # build config below\n    build: ."));
     });
 
     test("Jinja2 templated keys and complex expressions inside compose templates", () => {
@@ -692,8 +689,8 @@ networks:
 `;
       const once = DockerComposeSorter.sort(input, createConfig());
       const twice = DockerComposeSorter.sort(once, createConfig());
-      expect(twice).to.equal(once);
-      expect(once).to.contain("traefik.http.routers.{{ service_name }}.rule");
+      assert.strictEqual(twice, once);
+      assert.ok(once.includes("traefik.http.routers.{{ service_name }}.rule"));
     });
 
     test("Multi-document YAML with CRLF line endings and grouped service sorting", () => {
@@ -716,19 +713,21 @@ networks:
       });
 
       const result = DockerComposeSorter.sort(input, config);
-      expect(result).to.contain("\r\n");
-      expect(result.replace(/\r\n/g, "")).to.not.contain("\n");
-      expect(result).to.contain("container_name: web\r\n\r\n    image: nginx");
-      expect(result).to.contain("container_name: db\r\n\r\n    image: postgres");
+      assert.ok(result.includes("\r\n"));
+      assert.ok(!result.replace(/\r\n/g, "").includes("\n"));
+      assert.ok(result.includes("container_name: web\r\n\r\n    image: nginx"));
+      assert.ok(result.includes("container_name: db\r\n\r\n    image: postgres"));
     });
 
     test("Gracefully handles non-map root documents without error", () => {
-      expect(DockerComposeSorter.sort("", createConfig())).to.equal("");
-      expect(DockerComposeSorter.sort("   \n", createConfig())).to.equal("   \n");
-      expect(DockerComposeSorter.sort("# comment only\n", createConfig())).to.equal(
+      assert.strictEqual(DockerComposeSorter.sort("", createConfig()), "");
+      assert.strictEqual(DockerComposeSorter.sort("   \n", createConfig()), "   \n");
+      assert.strictEqual(
+        DockerComposeSorter.sort("# comment only\n", createConfig()),
         "# comment only\n"
       );
-      expect(DockerComposeSorter.sort("- item1\n- item2\n", createConfig())).to.equal(
+      assert.strictEqual(
+        DockerComposeSorter.sort("- item1\n- item2\n", createConfig()),
         "- item1\n- item2\n"
       );
     });
