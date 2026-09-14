@@ -35,6 +35,7 @@
     ["labels", "healthcheck"]
   ],
   "yaml-compose-sorter.useServiceKeyGroups": false,
+  "yaml-compose-sorter.preserveBlankLinesWithinServiceKeyGroups": true,
   "yaml-compose-sorter.addDocumentSeparator": false,
   "yaml-compose-sorter.addBlankLinesBetweenTopLevelKeys": true,
   "yaml-compose-sorter.removeVersionKey": false,

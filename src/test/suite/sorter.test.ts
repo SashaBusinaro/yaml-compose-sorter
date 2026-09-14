@@ -33,6 +33,7 @@ suite("DockerComposeSorter Test Suite", () => {
     ],
     serviceKeyGroups: DEFAULT_SERVICE_KEY_GROUPS,
     useServiceKeyGroups: false,
+    preserveBlankLinesWithinServiceKeyGroups: true,
     addDocumentSeparator: false,
     addBlankLinesTopLevel: true,
     removeVersionKey: false,
@@ -296,6 +297,57 @@ services:
     expect(result).to.contain("\n\n    hostname: app");
   });
 
+  test("Preserves blank lines within groups and the unknown-key section", () => {
+    const input = `
+services:
+  app:
+    build: .
+
+    image: node
+    zebra: true
+
+    apple: true
+`;
+    const result = DockerComposeSorter.sort(
+      input,
+      cleanConfig({
+        useServiceKeyGroups: true,
+        serviceKeyGroups: [["image", "build"]],
+        addBlankLinesTopLevel: false,
+        addBlankLinesServices: false
+      })
+    );
+
+    expect(result).to.contain("image: node\n\n    build: .");
+    expect(result).to.contain("apple: true\n\n    zebra: true");
+  });
+
+  test("Can disable preservation of internal grouped spacing", () => {
+    const input = `
+services:
+  app:
+    image: node
+
+    build: .
+    apple: true
+
+    zebra: true
+`;
+    const result = DockerComposeSorter.sort(
+      input,
+      cleanConfig({
+        useServiceKeyGroups: true,
+        preserveBlankLinesWithinServiceKeyGroups: false,
+        serviceKeyGroups: [["image", "build"]],
+        addBlankLinesTopLevel: false,
+        addBlankLinesServices: false
+      })
+    );
+
+    expect(result).to.not.contain("image: node\n\n    build:");
+    expect(result).to.not.contain("apple: true\n\n    zebra:");
+  });
+
   /*
    * ==========================================
    * 2. Defaults & Config Fallbacks
@@ -308,6 +360,7 @@ services:
       topLevelKeyOrder: [],
       serviceKeyOrder: [],
       useServiceKeyGroups: false,
+      preserveBlankLinesWithinServiceKeyGroups: true,
       addDocumentSeparator: false,
       addBlankLinesTopLevel: false,
       addBlankLinesServices: false,

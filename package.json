@@ -131,6 +131,11 @@
           "default": false,
           "description": "Use service key groups instead of serviceKeyOrder when groups are configured"
         },
+        "yaml-compose-sorter.preserveBlankLinesWithinServiceKeyGroups": {
+          "type": "boolean",
+          "default": true,
+          "description": "Preserve blank lines within configured service-key groups and between unknown service keys"
+        },
         "yaml-compose-sorter.addDocumentSeparator": {
           "type": "boolean",
           "default": false,

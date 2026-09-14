@@ -17,6 +17,7 @@ export interface SorterConfig {
   serviceKeyOrder: string[];
   serviceKeyGroups?: string[][];
   useServiceKeyGroups: boolean;
+  preserveBlankLinesWithinServiceKeyGroups: boolean;
   addDocumentSeparator: boolean;
   addBlankLinesTopLevel: boolean;
   addBlankLinesServices: boolean;
@@ -106,12 +107,15 @@ class DockerComposeFormattingProvider implements vscode.DocumentFormattingEditPr
     const serviceKeyGroups = config.get<string[][]>("serviceKeyGroups") ?? [];
     const serviceKeyOrder = config.get<string[]>("serviceKeyOrder") ?? [];
     const useServiceKeyGroups = config.get<boolean>("useServiceKeyGroups") ?? false;
+    const preserveBlankLinesWithinServiceKeyGroups =
+      config.get<boolean>("preserveBlankLinesWithinServiceKeyGroups") ?? true;
 
     return {
       topLevelKeyOrder: config.get<string[]>("topLevelKeyOrder") ?? [],
       serviceKeyOrder,
       serviceKeyGroups,
       useServiceKeyGroups,
+      preserveBlankLinesWithinServiceKeyGroups,
       addDocumentSeparator: config.get<boolean>("addDocumentSeparator") ?? false,
       addBlankLinesTopLevel: config.get<boolean>("addBlankLinesBetweenTopLevelKeys") ?? true,
       removeVersionKey: config.get<boolean>("removeVersionKey") ?? false,
@@ -186,12 +190,18 @@ export class DockerComposeSorter {
     const serviceKeyGroups = config.useServiceKeyGroups
       ? this.getServiceKeyGroups(config)
       : undefined;
+    const serviceInternalBlankLines = new Map<yaml.YAMLMap, Map<number, number>>();
     const services = contents.get("services");
     if (services && yaml.isMap(services)) {
       services.items.forEach((pair) => {
         if (yaml.isMap(pair.value)) {
           if (serviceKeyGroups) {
-            this.sortMapByGroups(pair.value as yaml.YAMLMap, serviceKeyGroups);
+            const serviceMap = pair.value as yaml.YAMLMap;
+            serviceInternalBlankLines.set(
+              serviceMap,
+              this.captureInternalBlankLines(serviceMap, serviceKeyGroups)
+            );
+            this.sortMapByGroups(serviceMap, serviceKeyGroups);
           } else {
             this.sortMap(pair.value as yaml.YAMLMap, config.serviceKeyOrder);
           }
@@ -205,7 +215,7 @@ export class DockerComposeSorter {
     }
 
     // 5. Apply Spacing
-    this.applySpacing(contents, config, serviceKeyGroups);
+    this.applySpacing(contents, config, serviceKeyGroups, serviceInternalBlankLines);
 
     // 6. Serialize
     return doc.toString(stringifyOptions);
@@ -300,6 +310,29 @@ export class DockerComposeSorter {
     return keyOrder;
   }
 
+  private static captureInternalBlankLines(
+    map: yaml.YAMLMap,
+    groups: string[][]
+  ): Map<number, number> {
+    const keyOrder = this.createGroupKeyOrder(groups);
+    const blankLines = new Map<number, number>();
+
+    map.items.forEach((item, index) => {
+      if (index === 0 || !yaml.isScalar(item.key) || !yaml.isScalar(map.items[index - 1].key)) {
+        return;
+      }
+
+      const currentSection = keyOrder.get(String(item.key))?.groupIndex ?? -1;
+      const previousSection = keyOrder.get(String(map.items[index - 1].key))?.groupIndex ?? -1;
+
+      if (currentSection === previousSection && item.key.spaceBefore === true) {
+        blankLines.set(currentSection, (blankLines.get(currentSection) ?? 0) + 1);
+      }
+    });
+
+    return blankLines;
+  }
+
   private static transformListsToMaps(doc: yaml.Document): void {
     yaml.visit(doc, {
       Pair(_, pair) {
@@ -366,7 +399,8 @@ export class DockerComposeSorter {
   private static applySpacing(
     contents: yaml.YAMLMap,
     config: SorterConfig,
-    serviceKeyGroups?: string[][]
+    serviceKeyGroups?: string[][],
+    serviceInternalBlankLines: Map<yaml.YAMLMap, Map<number, number>> = new Map()
   ): void {
     const resetSpacing = (node: any) => {
       if (node && node.key) {
@@ -401,14 +435,24 @@ export class DockerComposeSorter {
       if (serviceKeyGroups) {
         services.items.forEach((item) => {
           if (yaml.isMap(item.value)) {
-            this.applyGroupSpacing(item.value as yaml.YAMLMap, serviceKeyGroups);
+            this.applyGroupSpacing(
+              item.value as yaml.YAMLMap,
+              serviceKeyGroups,
+              config.preserveBlankLinesWithinServiceKeyGroups,
+              serviceInternalBlankLines.get(item.value as yaml.YAMLMap)
+            );
           }
         });
       }
     }
   }
 
-  private static applyGroupSpacing(map: yaml.YAMLMap, groups: string[][]): void {
+  private static applyGroupSpacing(
+    map: yaml.YAMLMap,
+    groups: string[][],
+    preserveInternalSpacing: boolean,
+    internalBlankLines: Map<number, number> = new Map()
+  ): void {
     const keyOrder = this.createGroupKeyOrder(groups);
     let previousGroupIndex: number | undefined;
 
@@ -418,16 +462,28 @@ export class DockerComposeSorter {
         return;
       }
 
-      item.key.spaceBefore = false;
       const groupPosition = keyOrder.get(String(item.key));
       const groupIndex = groupPosition?.groupIndex;
 
       const startsUntrackedSection = groupIndex === undefined && previousGroupIndex !== undefined;
       const startsConfiguredGroup = groupIndex !== undefined && groupIndex !== previousGroupIndex;
 
-      if (index > 0 && (startsConfiguredGroup || startsUntrackedSection)) {
+      if (index === 0) {
+        item.key.spaceBefore = false;
+      } else if (startsConfiguredGroup || startsUntrackedSection) {
+        // Group boundaries are always normalized to one blank line.
         item.key.spaceBefore = true;
         this.stripBoundaryCommentBlanks(map.items[index - 1].value);
+      } else if (!preserveInternalSpacing) {
+        // In legacy grouped-spacing mode, remove blanks inside groups and the
+        // implicit group containing unknown keys.
+        item.key.spaceBefore = false;
+      } else if (groupIndex === previousGroupIndex) {
+        const remaining = internalBlankLines.get(groupIndex ?? -1) ?? 0;
+        item.key.spaceBefore = remaining > 0;
+        if (remaining > 0) {
+          internalBlankLines.set(groupIndex ?? -1, remaining - 1);
+        }
       }
 
       previousGroupIndex = groupIndex;
