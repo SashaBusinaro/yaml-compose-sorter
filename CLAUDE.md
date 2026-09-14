@@ -6,7 +6,7 @@ VS Code extension ("Docker Compose Sorter") that sorts and formats Docker Compos
 
 - `npm run compile` — TypeScript build to `out/`
 - `npm run lint` / `npm run format` — ESLint / Prettier (Prettier owns formatting)
-- `npm test` — Mocha/Chai suite via `vscode-test` (downloads VS Code on first run)
+- `npm test` — Mocha suite via `vscode-test` using `node:assert/strict` (downloads VS Code on first run)
 - `npx @vscode/vsce package` — build the VSIX locally
 
 ## Invariants — do not break
