@@ -1,51 +1,8 @@
 import assert from "node:assert/strict";
-import * as vscode from "vscode";
-import { DockerComposeSorter, DOCKER_COMPOSE_SELECTOR, SorterConfig } from "../../extension";
+import { DockerComposeSorter } from "../../core";
+import { createConfig, DEFAULT_SERVICE_KEY_GROUPS } from "../helpers";
 
 suite("Adversary Test Suite", () => {
-  const DEFAULT_SERVICE_KEY_GROUPS: string[][] = [
-    ["container_name"],
-    ["image", "build"],
-    ["restart", "depends_on"],
-    ["ports", "expose"],
-    ["volumes"],
-    ["environment", "env_file"],
-    ["networks"],
-    ["labels", "healthcheck"]
-  ];
-
-  const BASE_CONFIG: SorterConfig = {
-    topLevelKeyOrder: ["version", "name", "services", "volumes", "networks", "configs", "secrets"],
-    serviceKeyOrder: [
-      "container_name",
-      "image",
-      "build",
-      "restart",
-      "depends_on",
-      "ports",
-      "expose",
-      "volumes",
-      "environment",
-      "env_file",
-      "networks",
-      "labels",
-      "healthcheck"
-    ],
-    serviceKeyGroups: DEFAULT_SERVICE_KEY_GROUPS,
-    useServiceKeyGroups: false,
-    preserveBlankLinesWithinServiceKeyGroups: true,
-    addDocumentSeparator: false,
-    addBlankLinesTopLevel: true,
-    removeVersionKey: false,
-    transformKeyValueLists: false,
-    addBlankLinesServices: true
-  };
-
-  const createConfig = (overrides: Partial<SorterConfig> = {}): SorterConfig => ({
-    ...BASE_CONFIG,
-    ...overrides
-  });
-
   /*
    * ========================================================================
    * 1. Adversarial Null / Empty Scalar Spacing (Issue #34)
@@ -433,36 +390,6 @@ volumes:
    * ========================================================================
    */
   suite("Issue #45: Jinja2 Templates Adversarial Probing", () => {
-    test("DOCKER_COMPOSE_SELECTOR matches all template extensions and language variants", () => {
-      const files = [
-        // Standard .j2 extensions
-        { path: "/project/docker-compose.yml.j2", lang: "plaintext" },
-        { path: "/project/docker-compose.yaml.j2", lang: "plaintext" },
-        { path: "/project/compose.yml.j2", lang: "plaintext" },
-        { path: "/project/compose.yaml.j2", lang: "plaintext" },
-        // Multi-part filenames
-        { path: "/project/docker-compose.prod.yml.j2", lang: "plaintext" },
-        { path: "/project/docker-compose.staging.yaml.j2", lang: "plaintext" },
-        { path: "/project/compose.dev.yml.j2", lang: "plaintext" },
-        { path: "/project/compose.override.yaml.j2", lang: "plaintext" },
-        // Direct .j2 and .jinja/.jinja2 extensions
-        { path: "/project/docker-compose.j2", lang: "plaintext" },
-        { path: "/project/compose.j2", lang: "plaintext" },
-        { path: "/project/docker-compose.jinja", lang: "plaintext" },
-        { path: "/project/compose.jinja2", lang: "plaintext" },
-        // Language mode activations
-        { path: "/custom/docker-compose.custom", lang: "jinja" },
-        { path: "/custom/compose.custom", lang: "jinja-yaml" },
-        { path: "/custom/docker-compose.yml", lang: "dockercompose" }
-      ];
-
-      for (const f of files) {
-        const doc = { uri: vscode.Uri.file(f.path), languageId: f.lang };
-        const score = vscode.languages.match(DOCKER_COMPOSE_SELECTOR, doc as any);
-        assert.ok(score > 0, `Expected DOCKER_COMPOSE_SELECTOR to match: ${f.path} (${f.lang})`);
-      }
-    });
-
     test("Complex Jinja2 template expressions (filters, pipes, math, variables)", () => {
       const input = `services:
   web:

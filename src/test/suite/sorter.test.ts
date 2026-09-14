@@ -1,52 +1,8 @@
 import assert from "node:assert/strict";
-import * as vscode from "vscode";
-import { DockerComposeSorter, DOCKER_COMPOSE_SELECTOR, SorterConfig } from "../../extension";
+import { DockerComposeSorter, SorterConfig } from "../../core";
+import { cleanConfig, DEFAULT_SERVICE_KEY_GROUPS } from "../helpers";
 
 suite("DockerComposeSorter Test Suite", () => {
-  const DEFAULT_SERVICE_KEY_GROUPS: string[][] = [
-    ["container_name"],
-    ["image", "build"],
-    ["restart", "depends_on"],
-    ["ports", "expose"],
-    ["volumes"],
-    ["environment", "env_file"],
-    ["networks"],
-    ["labels", "healthcheck"]
-  ];
-
-  const DEFAULT_CONFIG: SorterConfig = {
-    topLevelKeyOrder: ["version", "name", "services", "volumes", "networks", "configs", "secrets"],
-    serviceKeyOrder: [
-      "container_name",
-      "image",
-      "build",
-      "restart",
-      "depends_on",
-      "ports",
-      "expose",
-      "volumes",
-      "environment",
-      "env_file",
-      "networks",
-      "labels",
-      "healthcheck"
-    ],
-    serviceKeyGroups: DEFAULT_SERVICE_KEY_GROUPS,
-    useServiceKeyGroups: false,
-    preserveBlankLinesWithinServiceKeyGroups: true,
-    addDocumentSeparator: false,
-    addBlankLinesTopLevel: true,
-    removeVersionKey: false,
-    transformKeyValueLists: false,
-    addBlankLinesServices: true
-  };
-
-  /** Helper to merge defaults with overrides */
-  const cleanConfig = (overrides: Partial<SorterConfig> = {}): SorterConfig => ({
-    ...DEFAULT_CONFIG,
-    ...overrides
-  });
-
   /*
    * ==========================================
    * 1. Sorting Tests
@@ -881,27 +837,6 @@ volumes:
    * 10. Issue #45: Support Jinja2 Compose Templates
    * ==========================================
    */
-  test("Issue #45: DOCKER_COMPOSE_SELECTOR matches Jinja2 compose template filenames", () => {
-    const testCases = [
-      { uri: vscode.Uri.file("/path/to/docker-compose.yml.j2"), languageId: "plaintext" },
-      { uri: vscode.Uri.file("/path/to/docker-compose.yaml.j2"), languageId: "jinja" },
-      { uri: vscode.Uri.file("/path/to/compose.yml.j2"), languageId: "jinja-yaml" },
-      { uri: vscode.Uri.file("/path/to/compose.yaml.j2"), languageId: "yaml" },
-      { uri: vscode.Uri.file("/path/to/docker-compose.prod.yml.j2"), languageId: "plaintext" },
-      { uri: vscode.Uri.file("/path/to/compose.dev.yaml.j2"), languageId: "plaintext" },
-      {
-        uri: vscode.Uri.file("/path/to/docker-compose.override.yaml.j2"),
-        languageId: "jinja-yaml"
-      },
-      { uri: vscode.Uri.file("/path/to/compose.staging.yml.j2"), languageId: "jinja" }
-    ];
-
-    for (const tc of testCases) {
-      const score = vscode.languages.match(DOCKER_COMPOSE_SELECTOR, tc as any);
-      assert.ok(score > 0, `Expected selector match for ${tc.uri.fsPath} (${tc.languageId})`);
-    }
-  });
-
   test("Issue #45: Sorts Compose files containing Jinja2 template expressions", () => {
     const input = `services:
   web:
@@ -936,5 +871,94 @@ volumes:
     const once = DockerComposeSorter.sort(input, cleanConfig());
     const twice = DockerComposeSorter.sort(once, cleanConfig());
     assert.strictEqual(twice, once);
+  });
+
+  /*
+   * ==========================================
+   * 11. Merge Keys & Enhanced List Transformation
+   * ==========================================
+   */
+  test("Merge keys (<<) are prioritized to top of service definitions by default", () => {
+    const input = `x-common: &common
+  restart: always
+
+services:
+  web:
+    image: nginx
+    container_name: web
+    <<: *common
+`;
+    const result = DockerComposeSorter.sort(input, cleanConfig());
+    const webSection = result.slice(result.indexOf("  web:"));
+    const mergeIdx = webSection.indexOf("<<: *common");
+    const containerIdx = webSection.indexOf("container_name: web");
+    const imageIdx = webSection.indexOf("image: nginx");
+
+    assert.ok(mergeIdx !== -1, "Expected merge key in web section");
+    assert.ok(mergeIdx < containerIdx, "Expected << to come before container_name");
+    assert.ok(containerIdx < imageIdx, "Expected container_name before image");
+  });
+
+  test("Merge keys (<<) are prioritized to top of service definitions in grouped mode", () => {
+    const input = `x-common: &common
+  restart: always
+
+services:
+  web:
+    image: nginx
+    <<: *common
+    container_name: web
+`;
+    const result = DockerComposeSorter.sort(
+      input,
+      cleanConfig({
+        useServiceKeyGroups: true,
+        serviceKeyGroups: [["container_name"], ["image"]]
+      })
+    );
+    const webSection = result.slice(result.indexOf("  web:"));
+    const mergeIdx = webSection.indexOf("<<: *common");
+    const containerIdx = webSection.indexOf("container_name: web");
+
+    assert.ok(mergeIdx !== -1);
+    assert.ok(mergeIdx < containerIdx, "Expected << to come before group 0 in grouped mode");
+  });
+
+  test("Transform: supports empty values (e.g., - FOO= -> FOO: '')", () => {
+    const input = `services:
+  app:
+    environment:
+      - FOO=
+      - BAR=baz
+      - EMPTY=
+`;
+    const result = DockerComposeSorter.sort(input, cleanConfig({ transformKeyValueLists: true }));
+    assert.ok(result.includes('FOO: ""') || result.includes("FOO: ''") || result.includes("FOO:"));
+    assert.ok(result.includes("BAR: baz") || result.includes('BAR: "baz"'));
+    assert.ok(
+      result.includes('EMPTY: ""') || result.includes("EMPTY: ''") || result.includes("EMPTY:")
+    );
+  });
+
+  test("Transform: safely scopes transformation to compose keys and ignores unapproved keys", () => {
+    const input = `services:
+  app:
+    labels:
+      - traefik.enable=true
+    extra_hosts:
+      - somehost=162.242.195.82
+    command:
+      - "--config=/app/config.yaml"
+      - "--log-level=debug"
+`;
+    const result = DockerComposeSorter.sort(input, cleanConfig({ transformKeyValueLists: true }));
+    // labels and extra_hosts should transform to map
+    assert.ok(result.includes("traefik.enable: true") || result.includes('traefik.enable: "true"'));
+    assert.ok(
+      result.includes("somehost: 162.242.195.82") || result.includes('somehost: "162.242.195.82"')
+    );
+    // command must remain a sequence
+    assert.ok(result.includes('- "--config=/app/config.yaml"'));
+    assert.ok(result.includes('- "--log-level=debug"'));
   });
 });

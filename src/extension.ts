@@ -1,5 +1,8 @@
 import * as vscode from "vscode";
-import * as yaml from "yaml";
+import { DockerComposeSorter, SorterConfig, DEFAULT_CONFIG } from "./core";
+
+// Re-export core types and classes for backward compatibility
+export { DockerComposeSorter, SorterConfig } from "./core";
 
 // ============================================================================
 // Constants & Configuration
@@ -18,25 +21,15 @@ export const DOCKER_COMPOSE_SELECTOR: vscode.DocumentSelector = [
   { language: "jinja", pattern: "**/{docker-compose,compose}*" }
 ];
 
-export interface SorterConfig {
-  topLevelKeyOrder: string[];
-  serviceKeyOrder: string[];
-  serviceKeyGroups?: string[][];
-  useServiceKeyGroups: boolean;
-  preserveBlankLinesWithinServiceKeyGroups: boolean;
-  addDocumentSeparator: boolean;
-  addBlankLinesTopLevel: boolean;
-  addBlankLinesServices: boolean;
-  removeVersionKey: boolean;
-  transformKeyValueLists: boolean;
-}
-
 // ============================================================================
 // Extension Lifecycle
 // ============================================================================
 
 export function activate(context: vscode.ExtensionContext): void {
-  const formatter = new DockerComposeFormattingProvider();
+  const outputChannel = vscode.window.createOutputChannel("Docker Compose Sorter");
+  context.subscriptions.push(outputChannel);
+
+  const formatter = new DockerComposeFormattingProvider(outputChannel);
 
   context.subscriptions.push(
     vscode.languages.registerDocumentFormattingEditProvider(DOCKER_COMPOSE_SELECTOR, formatter)
@@ -49,19 +42,36 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
-      const edits = formatter.provideDocumentFormattingEdits(
-        editor.document,
-        {
-          insertSpaces: editor.options.insertSpaces !== false,
-          tabSize: typeof editor.options.tabSize === "number" ? editor.options.tabSize : 2
-        },
-        new vscode.CancellationTokenSource().token
-      );
+      const document = editor.document;
+      const text = document.getText();
+      const config = formatter.getConfiguration();
+      const indent =
+        editor.options.insertSpaces !== false &&
+        typeof editor.options.tabSize === "number" &&
+        editor.options.tabSize > 0
+          ? editor.options.tabSize
+          : 2;
 
-      if (edits && Array.isArray(edits) && edits.length > 0) {
+      try {
+        const formatted = DockerComposeSorter.sort(text, config, indent);
+        if (text === formatted) {
+          return;
+        }
+
+        const fullRange = new vscode.Range(
+          document.positionAt(0),
+          document.positionAt(text.length)
+        );
+
         await editor.edit((editBuilder) => {
-          edits.forEach((edit) => editBuilder.replace(edit.range, edit.newText));
+          editBuilder.replace(fullRange, formatted);
         });
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        outputChannel.appendLine(
+          `[${new Date().toISOString()}] Manual sort failed for ${document.fileName}: ${msg}`
+        );
+        vscode.window.showErrorMessage(`Compose Sorter failed: ${msg}`);
       }
     })
   );
@@ -73,7 +83,9 @@ export function deactivate(): void {}
 // Formatter Provider
 // ============================================================================
 
-class DockerComposeFormattingProvider implements vscode.DocumentFormattingEditProvider {
+export class DockerComposeFormattingProvider implements vscode.DocumentFormattingEditProvider {
+  constructor(private readonly outputChannel?: vscode.OutputChannel) {}
+
   provideDocumentFormattingEdits(
     document: vscode.TextDocument,
     options: vscode.FormattingOptions,
@@ -102,458 +114,37 @@ class DockerComposeFormattingProvider implements vscode.DocumentFormattingEditPr
 
       return [vscode.TextEdit.replace(fullRange, formatted)];
     } catch (error) {
-      console.error("Docker Compose Sorter Error:", error);
-      vscode.window.showErrorMessage(`Compose Sorter failed: ${(error as Error).message}`);
+      const msg = error instanceof Error ? error.message : String(error);
+      this.outputChannel?.appendLine(
+        `[${new Date().toISOString()}] Formatting failed for ${document.fileName}: ${msg}`
+      );
+      // Silently log to OutputChannel rather than displaying disruptive error popups on save
       return [];
     }
   }
 
-  private getConfiguration(): SorterConfig {
+  public getConfiguration(): SorterConfig {
     const config = vscode.workspace.getConfiguration("yaml-compose-sorter");
-    const serviceKeyGroups = config.get<string[][]>("serviceKeyGroups") ?? [];
-    const serviceKeyOrder = config.get<string[]>("serviceKeyOrder") ?? [];
-    const useServiceKeyGroups = config.get<boolean>("useServiceKeyGroups") ?? false;
-    const preserveBlankLinesWithinServiceKeyGroups =
-      config.get<boolean>("preserveBlankLinesWithinServiceKeyGroups") ?? true;
-
     return {
-      topLevelKeyOrder: config.get<string[]>("topLevelKeyOrder") ?? [],
-      serviceKeyOrder,
-      serviceKeyGroups,
-      useServiceKeyGroups,
-      preserveBlankLinesWithinServiceKeyGroups,
-      addDocumentSeparator: config.get<boolean>("addDocumentSeparator") ?? false,
-      addBlankLinesTopLevel: config.get<boolean>("addBlankLinesBetweenTopLevelKeys") ?? true,
-      removeVersionKey: config.get<boolean>("removeVersionKey") ?? false,
-      transformKeyValueLists: config.get<boolean>("transformKeyValueLists") ?? false,
-      addBlankLinesServices: config.get<boolean>("addBlankLinesBetweenServices") ?? true
+      topLevelKeyOrder: config.get<string[]>("topLevelKeyOrder") ?? DEFAULT_CONFIG.topLevelKeyOrder,
+      serviceKeyOrder: config.get<string[]>("serviceKeyOrder") ?? DEFAULT_CONFIG.serviceKeyOrder,
+      serviceKeyGroups:
+        config.get<string[][]>("serviceKeyGroups") ?? DEFAULT_CONFIG.serviceKeyGroups,
+      useServiceKeyGroups:
+        config.get<boolean>("useServiceKeyGroups") ?? DEFAULT_CONFIG.useServiceKeyGroups,
+      preserveBlankLinesWithinServiceKeyGroups:
+        config.get<boolean>("preserveBlankLinesWithinServiceKeyGroups") ??
+        DEFAULT_CONFIG.preserveBlankLinesWithinServiceKeyGroups,
+      addDocumentSeparator:
+        config.get<boolean>("addDocumentSeparator") ?? DEFAULT_CONFIG.addDocumentSeparator,
+      addBlankLinesTopLevel:
+        config.get<boolean>("addBlankLinesBetweenTopLevelKeys") ??
+        DEFAULT_CONFIG.addBlankLinesTopLevel,
+      removeVersionKey: config.get<boolean>("removeVersionKey") ?? DEFAULT_CONFIG.removeVersionKey,
+      transformKeyValueLists:
+        config.get<boolean>("transformKeyValueLists") ?? DEFAULT_CONFIG.transformKeyValueLists,
+      addBlankLinesServices:
+        config.get<boolean>("addBlankLinesBetweenServices") ?? DEFAULT_CONFIG.addBlankLinesServices
     };
-  }
-}
-
-// ============================================================================
-// Core Logic (AST Manipulation)
-// ============================================================================
-
-export class DockerComposeSorter {
-  public static sort(yamlText: string, config: SorterConfig, indent: number = 2): string {
-    const usesCrlf = yamlText.includes("\r\n");
-    const source = usesCrlf ? yamlText.replace(/\r\n/g, "\n") : yamlText;
-
-    const docs = yaml.parseAllDocuments(source, {
-      keepSourceTokens: false // Regenerate tokens for clean sorting
-    });
-
-    if (docs.length === 0) {
-      return yamlText;
-    }
-
-    for (const doc of docs) {
-      if (doc.errors.length > 0) {
-        throw new Error(`Invalid YAML: ${doc.errors[0].message}`);
-      }
-    }
-
-    // Single non-map document (scalar, list, empty): nothing to sort
-    if (docs.length === 1 && (!docs[0].contents || !yaml.isMap(docs[0].contents))) {
-      return yamlText;
-    }
-
-    let output = docs
-      .map((doc) => this.processDocument(doc, config, indent))
-      .map((text, index) => (index > 0 && !text.startsWith("---") ? `---\n${text}` : text))
-      .join("");
-
-    if (config.addDocumentSeparator && !output.startsWith("---")) {
-      output = "---\n" + output;
-    }
-
-    return usesCrlf ? output.replace(/\n/g, "\r\n") : output;
-  }
-
-  private static processDocument(doc: yaml.Document, config: SorterConfig, indent: number): string {
-    const stringifyOptions: yaml.ToStringOptions = {
-      lineWidth: 0,
-      minContentWidth: 0,
-      indent
-    };
-
-    if (!doc.contents || !yaml.isMap(doc.contents)) {
-      return doc.toString(stringifyOptions);
-    }
-
-    const contents = doc.contents as yaml.YAMLMap;
-
-    // 1. Remove Version if requested
-    if (config.removeVersionKey && contents.has("version")) {
-      contents.delete("version");
-    }
-
-    // 2. Sort Top Level
-    this.sortMap(contents, config.topLevelKeyOrder, true);
-
-    // 3. Process Services
-    const serviceKeyGroups = config.useServiceKeyGroups
-      ? this.getServiceKeyGroups(config)
-      : undefined;
-    const serviceInternalBlankLines = new Map<yaml.YAMLMap, Map<number, number>>();
-    const services = contents.get("services");
-    if (services && yaml.isMap(services)) {
-      services.items.forEach((pair) => {
-        if (yaml.isMap(pair.value)) {
-          if (serviceKeyGroups) {
-            const serviceMap = pair.value as yaml.YAMLMap;
-            serviceInternalBlankLines.set(
-              serviceMap,
-              this.captureInternalBlankLines(serviceMap, serviceKeyGroups)
-            );
-            this.sortMapByGroups(serviceMap, serviceKeyGroups);
-          } else {
-            this.sortMap(pair.value as yaml.YAMLMap, config.serviceKeyOrder);
-          }
-        }
-      });
-    }
-
-    // 4. Transform Lists ["KEY=VAL"] -> { KEY: VAL }
-    if (config.transformKeyValueLists) {
-      this.transformListsToMaps(doc);
-    }
-
-    // 5. Apply Spacing
-    this.applySpacing(contents, config, serviceKeyGroups, serviceInternalBlankLines);
-
-    // 6. Serialize
-    return doc.toString(stringifyOptions);
-  }
-
-  private static sortMap(
-    map: yaml.YAMLMap,
-    order: string[],
-    extensionKeysFirst: boolean = false
-  ): void {
-    map.items.sort((a, b) => {
-      const keyA = String(a.key);
-      const keyB = String(b.key);
-
-      const idxA = order.indexOf(keyA);
-      const idxB = order.indexOf(keyB);
-
-      // Extension fields (x-*) usually hold YAML anchors, so they must stay
-      // before the keys that reference them. Keep their original relative
-      // order (anchors may reference each other) unless explicitly configured.
-      const extA = extensionKeysFirst && idxA === -1 && keyA.startsWith("x-");
-      const extB = extensionKeysFirst && idxB === -1 && keyB.startsWith("x-");
-      if (extA && extB) {
-        return 0;
-      }
-      if (extA) {
-        return -1;
-      }
-      if (extB) {
-        return 1;
-      }
-
-      if (idxA > -1 && idxB > -1) {
-        return idxA - idxB;
-      }
-      if (idxA > -1) {
-        return -1;
-      }
-      if (idxB > -1) {
-        return 1;
-      }
-
-      return keyA.localeCompare(keyB);
-    });
-  }
-
-  private static getServiceKeyGroups(config: SorterConfig): string[][] | undefined {
-    const groups = config.serviceKeyGroups;
-    return groups && groups.length > 0 ? groups : undefined;
-  }
-
-  private static sortMapByGroups(map: yaml.YAMLMap, groups: string[][]): void {
-    const keyOrder = this.createGroupKeyOrder(groups);
-
-    map.items.sort((a, b) => {
-      const keyA = String(a.key);
-      const keyB = String(b.key);
-
-      const positionA = keyOrder.get(keyA);
-      const positionB = keyOrder.get(keyB);
-
-      if (positionA && positionB) {
-        if (positionA.groupIndex !== positionB.groupIndex) {
-          return positionA.groupIndex - positionB.groupIndex;
-        }
-        return positionA.keyIndex - positionB.keyIndex;
-      }
-      if (positionA) {
-        return -1;
-      }
-      if (positionB) {
-        return 1;
-      }
-
-      return keyA.localeCompare(keyB);
-    });
-  }
-
-  private static createGroupKeyOrder(
-    groups: string[][]
-  ): Map<string, { groupIndex: number; keyIndex: number }> {
-    const keyOrder = new Map<string, { groupIndex: number; keyIndex: number }>();
-
-    groups.forEach((keys, groupIndex) => {
-      keys.forEach((key, keyIndex) => {
-        if (!keyOrder.has(key)) {
-          keyOrder.set(key, { groupIndex, keyIndex });
-        }
-      });
-    });
-
-    return keyOrder;
-  }
-
-  private static captureInternalBlankLines(
-    map: yaml.YAMLMap,
-    groups: string[][]
-  ): Map<number, number> {
-    const keyOrder = this.createGroupKeyOrder(groups);
-    const blankLines = new Map<number, number>();
-
-    map.items.forEach((item, index) => {
-      if (index === 0 || !yaml.isScalar(item.key) || !yaml.isScalar(map.items[index - 1].key)) {
-        return;
-      }
-
-      const currentSection = keyOrder.get(String(item.key))?.groupIndex ?? -1;
-      const previousSection = keyOrder.get(String(map.items[index - 1].key))?.groupIndex ?? -1;
-
-      if (currentSection === previousSection && item.key.spaceBefore === true) {
-        blankLines.set(currentSection, (blankLines.get(currentSection) ?? 0) + 1);
-      }
-    });
-
-    return blankLines;
-  }
-
-  private static transformListsToMaps(doc: yaml.Document): void {
-    yaml.visit(doc, {
-      Pair(_, pair) {
-        // Keys can be non-scalar (e.g. merge keys or complex keys): leave those untouched
-        if (!yaml.isScalar(pair.key) || typeof pair.key.value !== "string") {
-          return undefined;
-        }
-
-        // Skip 'command' or 'entrypoint' as they strictly require array syntax often
-        const key = pair.key.value;
-        if (["command", "entrypoint"].includes(key)) {
-          return yaml.visit.SKIP;
-        }
-
-        if (yaml.isSeq(pair.value) && DockerComposeSorter.canTransformSeq(pair.value)) {
-          pair.value = DockerComposeSorter.seqToMap(pair.value);
-        }
-      }
-    });
-  }
-
-  private static canTransformSeq(seq: yaml.YAMLSeq): boolean {
-    if (seq.items.length === 0) {
-      return false;
-    }
-    return seq.items.every((item) => {
-      if (!yaml.isScalar(item) || typeof item.value !== "string") {
-        return false;
-      }
-      const str = item.value;
-      return str.includes("=") && !str.startsWith("=") && !str.endsWith("=");
-    });
-  }
-
-  private static seqToMap(seq: yaml.YAMLSeq): yaml.YAMLMap {
-    const map = new yaml.YAMLMap();
-    if (seq.commentBefore) {
-      map.commentBefore = seq.commentBefore;
-    }
-    if (seq.comment) {
-      map.comment = seq.comment;
-    }
-
-    seq.items.forEach((item) => {
-      if (yaml.isScalar(item) && typeof item.value === "string") {
-        const [key, ...rest] = item.value.split("=");
-        const val = rest.join("=");
-
-        // Preserve comments
-        const pair = new yaml.Pair(new yaml.Scalar(key.trim()), new yaml.Scalar(val));
-        if (item.comment) {
-          pair.value!.comment = item.comment;
-        }
-        if (item.commentBefore) {
-          pair.key!.commentBefore = item.commentBefore;
-        }
-
-        map.add(pair);
-      }
-    });
-    return map;
-  }
-
-  private static applySpacing(
-    contents: yaml.YAMLMap,
-    config: SorterConfig,
-    serviceKeyGroups?: string[][],
-    serviceInternalBlankLines: Map<yaml.YAMLMap, Map<number, number>> = new Map()
-  ): void {
-    const resetSpacing = (node: any) => {
-      if (node && node.key) {
-        node.key.spaceBefore = false;
-      }
-    };
-
-    contents.items.forEach(resetSpacing);
-
-    // Top Level Spacing
-    if (config.addBlankLinesTopLevel) {
-      contents.items.forEach((item, index) => {
-        if (index > 0 && yaml.isScalar(item.key)) {
-          item.key.spaceBefore = true;
-          this.stripBoundaryCommentBlanks(contents.items[index - 1].value);
-        }
-      });
-    }
-
-    // Service Level Spacing
-    const services = contents.get("services");
-    if (services && yaml.isMap(services)) {
-      if (config.addBlankLinesServices) {
-        services.items.forEach((item, index) => {
-          if (index > 0 && yaml.isScalar(item.key)) {
-            item.key.spaceBefore = true;
-            this.stripBoundaryCommentBlanks(services.items[index - 1].value);
-          }
-        });
-      }
-
-      if (serviceKeyGroups) {
-        services.items.forEach((item) => {
-          if (yaml.isMap(item.value)) {
-            this.applyGroupSpacing(
-              item.value as yaml.YAMLMap,
-              serviceKeyGroups,
-              config.preserveBlankLinesWithinServiceKeyGroups,
-              serviceInternalBlankLines.get(item.value as yaml.YAMLMap)
-            );
-          }
-        });
-      }
-    }
-  }
-
-  private static applyGroupSpacing(
-    map: yaml.YAMLMap,
-    groups: string[][],
-    preserveInternalSpacing: boolean,
-    internalBlankLines: Map<number, number> = new Map()
-  ): void {
-    const keyOrder = this.createGroupKeyOrder(groups);
-    let previousGroupIndex: number | undefined;
-
-    map.items.forEach((item, index) => {
-      if (!yaml.isScalar(item.key)) {
-        previousGroupIndex = undefined;
-        return;
-      }
-
-      const groupPosition = keyOrder.get(String(item.key));
-      const groupIndex = groupPosition?.groupIndex;
-
-      const startsUntrackedSection = groupIndex === undefined && previousGroupIndex !== undefined;
-      const startsConfiguredGroup = groupIndex !== undefined && groupIndex !== previousGroupIndex;
-
-      if (index === 0) {
-        item.key.spaceBefore = false;
-      } else if (startsConfiguredGroup || startsUntrackedSection) {
-        // Group boundaries are always normalized to one blank line.
-        item.key.spaceBefore = true;
-        this.stripBoundaryCommentBlanks(map.items[index - 1].value);
-      } else if (!preserveInternalSpacing) {
-        // In legacy grouped-spacing mode, remove blanks inside groups and the
-        // implicit group containing unknown keys.
-        item.key.spaceBefore = false;
-      } else if (groupIndex === previousGroupIndex) {
-        const remaining = internalBlankLines.get(groupIndex ?? -1) ?? 0;
-        item.key.spaceBefore = remaining > 0;
-        if (remaining > 0) {
-          internalBlankLines.set(groupIndex ?? -1, remaining - 1);
-        }
-      }
-
-      previousGroupIndex = groupIndex;
-    });
-  }
-
-  /**
-   * The blank line that separates a block from the following sibling is owned
-   * by that sibling's `spaceBefore` flag. A trailing comment that closes the
-   * preceding block can *also* encode those blank lines as trailing newlines in
-   * its `comment` string. Left untouched they stack with `spaceBefore` and grow
-   * by one on every format run (issue #21), breaking idempotency.
-   *
-   * Strip the trailing blank-line newlines from the comment that renders right
-   * before the next sibling: the outermost trailing comment along the rightmost
-   * spine of `prevValue`. Inner comments and `commentBefore` are left alone, so
-   * blank lines *inside* a block are preserved.
-   */
-  private static stripBoundaryCommentBlanks(prevValue: unknown): void {
-    let node = prevValue as
-      | {
-          comment?: unknown;
-          items?: unknown[];
-          spaceBefore?: unknown;
-          value?: unknown;
-          type?: unknown;
-        }
-      | null
-      | undefined;
-
-    while (node) {
-      if (typeof node.comment === "string") {
-        // Outermost trailing comment found: normalize it only if it carries
-        // boundary blank lines, then stop (deeper comments stay intra-block).
-        node.comment = node.comment.replace(/\n+$/, "");
-        if (
-          yaml.isScalar(node) &&
-          (node.value === null ||
-            node.value === undefined ||
-            (node.value === "" && node.type === "PLAIN"))
-        ) {
-          node.spaceBefore = false;
-        }
-        return;
-      }
-
-      // Descend along the rightmost spine (last child) toward the boundary.
-      if (!yaml.isMap(node) && !yaml.isSeq(node)) {
-        if (
-          yaml.isScalar(node) &&
-          (node.value === null ||
-            node.value === undefined ||
-            (node.value === "" && node.type === "PLAIN"))
-        ) {
-          node.spaceBefore = false;
-        }
-        return;
-      }
-      const items = node.items;
-      if (!items || items.length === 0) {
-        return;
-      }
-      const last = items[items.length - 1];
-      node = (yaml.isPair(last) ? last.value : last) as typeof node;
-    }
   }
 }
