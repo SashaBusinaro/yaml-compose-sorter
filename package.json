@@ -45,6 +45,15 @@
     "onLanguage:jinja-yaml"
   ],
   "main": "./out/extension.js",
+  "pricing": "Free",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true
+    },
+    "virtualWorkspaces": {
+      "supported": true
+    }
+  },
   "contributes": {
     "commands": [
       {
@@ -170,6 +179,7 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
+    "typecheck": "tsc --noEmit",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
     "format": "prettier --write .",

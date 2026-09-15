@@ -6,8 +6,50 @@ on:
       - main
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
-  test:
+  pr-title:
+    name: Validate PR Title
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - name: Check Conventional Commit PR Title
+        uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  unit-tests:
+    name: Unit Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: "npm"
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Unit Tests
+        run: npm run test:unit
+
+  test-and-package:
+    name: Integration & Packaging
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -28,17 +70,15 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Typecheck
+        run: npm run typecheck
+
       - name: Compile
         run: npm run compile
-
-      - name: Run Unit Tests
-        run: npm run test:unit
 
       - name: Run Integration Tests with Coverage
         run: xvfb-run -a npm run test:coverage
 
-      # Runs the same validation as `vsce publish` (e.g. @types/vscode must not
-      # exceed engines.vscode), so packaging issues surface here instead of only
-      # at release time.
-      - name: Validate packaging
-        run: npx @vscode/vsce package --out /tmp/extension.vsix
+      # Runs packaging validation to surface issues early in PRs
+      - name: Validate Packaging
+        run: npx @vscode/vsce package --out DockerComposeSorter.vsix

@@ -1,0 +1,80 @@
+name: Bug Report
+description: Create a bug report to help us reproduce and fix the issue
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting an issue! Please check existing issues first to see if your bug has already been reported.
+
+  - type: input
+    id: vscode-version
+    attributes:
+      label: VS Code Version
+      placeholder: e.g. 1.101.0
+    validations:
+      required: true
+
+  - type: input
+    id: extension-version
+    attributes:
+      label: Extension Version
+      placeholder: e.g. 1.1.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - macOS
+        - Linux
+        - Windows
+    validations:
+      required: true
+
+  - type: textarea
+    id: compose-input
+    attributes:
+      label: Input Docker Compose YAML
+      description: Provide a minimal, reproducible example of your Compose file before formatting.
+      render: yaml
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual Output
+      description: What was the result of running the sort / formatting?
+      render: yaml
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Output
+      description: What did you expect the sorted file to look like?
+      render: yaml
+    validations:
+      required: true
+
+  - type: textarea
+    id: extension-settings
+    attributes:
+      label: Extension Settings
+      description: Any relevant `yaml-compose-sorter.*` settings configured in your settings.json.
+      render: json
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Output Channel Logs
+      description: Check the "Docker Compose Sorter" output channel in VS Code (View -> Output) and paste any relevant logs or errors.
+      render: text
+    validations:
+      required: false

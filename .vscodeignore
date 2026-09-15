@@ -20,5 +20,10 @@ vsc-extension-quickstart.md
 **/.vscode-test.*
 *.vsix
 commitlint.config.mjs
-CLAUDE.md
+AGENTS.md
+SECURITY.md
+images/preview.gif
+images/logo.png
+**/node_modules/yaml/browser/**
 coverage/**
+**/.DS_Store
