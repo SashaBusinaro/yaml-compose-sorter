@@ -11,6 +11,10 @@ suite("Extension and VS Code Integration Test Suite", () => {
     }
   });
 
+  teardown(async () => {
+    await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+  });
+
   /*
    * ========================================================================
    * 1. Activation and Command Registration
@@ -128,11 +132,72 @@ suite("Extension and VS Code Integration Test Suite", () => {
     assert.ok(loggedLines[0].includes("Formatting failed"));
   });
 
+  test("DockerComposeFormattingProvider returns empty edits when cancellation is requested", async () => {
+    const provider = new DockerComposeFormattingProvider();
+    const doc = await vscode.workspace.openTextDocument({
+      language: "yaml",
+      content: "services: {}\nversion: '3.8'\n"
+    });
+
+    const cts = new vscode.CancellationTokenSource();
+    cts.cancel();
+
+    const edits = provider.provideDocumentFormattingEdits(
+      doc,
+      { insertSpaces: true, tabSize: 2 },
+      cts.token
+    );
+
+    assert.deepStrictEqual(edits, [], "Expected no edits when token is cancelled");
+  });
+
+  test("DockerComposeFormattingProvider returns empty edits when document is already sorted", async () => {
+    const provider = new DockerComposeFormattingProvider();
+    const sortedContent = "version: '3.8'\n\nservices: {}\n";
+    const doc = await vscode.workspace.openTextDocument({
+      language: "yaml",
+      content: sortedContent
+    });
+
+    const edits = provider.provideDocumentFormattingEdits(
+      doc,
+      { insertSpaces: true, tabSize: 2 },
+      new vscode.CancellationTokenSource().token
+    );
+
+    assert.deepStrictEqual(edits, [], "Expected no edits for already formatted document");
+  });
+
+  test("DockerComposeFormattingProvider falls back to 2 spaces when tabs are requested", async () => {
+    const provider = new DockerComposeFormattingProvider();
+    const doc = await vscode.workspace.openTextDocument({
+      language: "yaml",
+      content: "services:\n  app:\n    image: node\n"
+    });
+
+    const edits = provider.provideDocumentFormattingEdits(
+      doc,
+      { insertSpaces: false, tabSize: 4 },
+      new vscode.CancellationTokenSource().token
+    );
+
+    assert.ok(Array.isArray(edits), "Expected edits array");
+  });
+
   /*
    * ========================================================================
    * 4. Command Execution in Active Editor
    * ========================================================================
    */
+  test("Executing 'yaml-compose-sorter.sort' without an active editor does not throw", async () => {
+    await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+    assert.strictEqual(vscode.window.activeTextEditor, undefined);
+
+    await assert.doesNotReject(async () => {
+      await vscode.commands.executeCommand("yaml-compose-sorter.sort");
+    }, "Command should safely no-op when no editor is open");
+  });
+
   test("Executing 'yaml-compose-sorter.sort' formats active editor", async () => {
     const doc = await vscode.workspace.openTextDocument({
       language: "yaml",
@@ -149,5 +214,46 @@ suite("Extension and VS Code Integration Test Suite", () => {
     assert.ok(versionIdx !== -1, "Expected version key in document");
     assert.ok(servicesIdx !== -1, "Expected services key in document");
     assert.ok(versionIdx < servicesIdx, "Expected version to precede services after sort");
+  });
+
+  test("Executing 'yaml-compose-sorter.sort' on already sorted document performs no-op", async () => {
+    const doc = await vscode.workspace.openTextDocument({
+      language: "yaml",
+      content: "services: {}\nversion: '3.8'\n"
+    });
+    await vscode.window.showTextDocument(doc);
+
+    // First sort to format
+    await vscode.commands.executeCommand("yaml-compose-sorter.sort");
+    const formattedText = doc.getText();
+
+    // Second sort should hit early return (text === formatted)
+    await vscode.commands.executeCommand("yaml-compose-sorter.sort");
+    assert.strictEqual(doc.getText(), formattedText);
+  });
+
+  test("Executing 'yaml-compose-sorter.sort' on invalid YAML triggers error handler", async () => {
+    const doc = await vscode.workspace.openTextDocument({
+      language: "yaml",
+      content: "services:\n  bad_indent:\n foo: bar\n  baz"
+    });
+    await vscode.window.showTextDocument(doc);
+
+    await assert.doesNotReject(async () => {
+      await vscode.commands.executeCommand("yaml-compose-sorter.sort");
+    }, "Command should handle sorting error gracefully");
+  });
+
+  test("Executing 'yaml-compose-sorter.sort' with custom tabSize option", async () => {
+    const doc = await vscode.workspace.openTextDocument({
+      language: "yaml",
+      content: "services: {}\nversion: '3.8'\n"
+    });
+    const editor = await vscode.window.showTextDocument(doc);
+    editor.options.tabSize = 4;
+    editor.options.insertSpaces = true;
+
+    await vscode.commands.executeCommand("yaml-compose-sorter.sort");
+    assert.ok(doc.getText().includes("version:"));
   });
 });

@@ -1007,4 +1007,72 @@ services:
     const sepIdx = result.indexOf("---");
     assert.ok(commentIdx !== -1 && sepIdx !== -1);
   });
+
+  /*
+   * ==========================================
+   * 12. AST Transform & Spacing Edge Cases
+   * ==========================================
+   */
+  test("Transform: leaves empty sequence untouched", () => {
+    const input = `services:
+  app:
+    environment: []
+`;
+    const result = DockerComposeSorter.sort(input, cleanConfig({ transformKeyValueLists: true }));
+    assert.ok(result.includes("environment: []"));
+  });
+
+  test("Transform: refuses sequences containing non-scalar or mapping items", () => {
+    const input = `services:
+  app:
+    environment:
+      - FOO=1
+      - nested:
+          bar: 1
+`;
+    const result = DockerComposeSorter.sort(input, cleanConfig({ transformKeyValueLists: true }));
+    assert.ok(result.includes("- FOO=1"));
+    assert.ok(result.includes("nested:"));
+  });
+
+  test("Transform: preserves comment directly on the sequence node", () => {
+    const input = `services:
+  app:
+    environment: # sequence comment
+      - FOO=1
+`;
+    const result = DockerComposeSorter.sort(input, cleanConfig({ transformKeyValueLists: true }));
+    assert.ok(result.includes("# sequence comment"));
+    assert.ok(result.includes("FOO: 1") || result.includes('FOO: "1"'));
+  });
+
+  test("Transform: preserves commentBefore on sequence items when converting to map", () => {
+    const input = `services:
+  app:
+    environment:
+      # Lead comment before item
+      - FOO=bar
+`;
+    const result = DockerComposeSorter.sort(input, cleanConfig({ transformKeyValueLists: true }));
+    assert.ok(result.includes("# Lead comment before item"));
+    assert.ok(result.includes("FOO: bar") || result.includes('FOO: "bar"'));
+  });
+
+  test("Group spacing gracefully handles non-scalar complex keys inside service mapping", () => {
+    const input = `services:
+  app:
+    image: node:20
+    ? [complex, key]
+    : value
+`;
+    const result = DockerComposeSorter.sort(
+      input,
+      cleanConfig({
+        useServiceKeyGroups: true,
+        serviceKeyGroups: [["image"]]
+      })
+    );
+    assert.ok(result.includes("image: node:20"));
+    assert.ok(result.includes("[ complex, key ]") || result.includes("[complex, key]"));
+  });
 });

@@ -31,8 +31,11 @@ jobs:
       - name: Compile
         run: npm run compile
 
-      - name: Run Tests
-        run: xvfb-run -a npm test
+      - name: Run Unit Tests
+        run: npm run test:unit
+
+      - name: Run Integration Tests with Coverage
+        run: xvfb-run -a npm run test:coverage
 
       # Runs the same validation as `vsce publish` (e.g. @types/vscode must not
       # exceed engines.vscode), so packaging issues surface here instead of only

@@ -178,6 +178,7 @@
     "pretest:unit": "npm run compile",
     "test:unit": "mocha --ui tdd out/test/suite/sorter.test.js out/test/suite/adversary.test.js",
     "test:integration": "vscode-test",
+    "test:coverage": "vscode-test --coverage --coverage-reporter text --coverage-reporter lcov",
     "prepare": "husky"
   },
   "lint-staged": {

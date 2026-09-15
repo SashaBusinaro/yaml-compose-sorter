@@ -21,3 +21,4 @@ vsc-extension-quickstart.md
 *.vsix
 commitlint.config.mjs
 CLAUDE.md
+coverage/**
