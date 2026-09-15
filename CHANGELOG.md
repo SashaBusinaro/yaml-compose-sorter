@@ -3,6 +3,19 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1](https://github.com/SashaBusinaro/yaml-compose-sorter/compare/v1.1.0...v1.1.1) (2026-09-15)
+
+
+### Bug Fixes
+
+* **core:** preserve anchor order before merge keys and guard list conversions ([889bdb1](https://github.com/SashaBusinaro/yaml-compose-sorter/commit/889bdb1021af8e09bd66ad3dc593971dd3e2ff7d))
+
+
+### Code Refactoring
+
+* **core:** decouple AST sorter engine from VS Code API and refine algorithms ([aa518f8](https://github.com/SashaBusinaro/yaml-compose-sorter/commit/aa518f8a4e684930990c3cd4a6f6e7e64dea03b8))
+* **test:** migrate assertions to node:assert/strict and remove chai ([e83821a](https://github.com/SashaBusinaro/yaml-compose-sorter/commit/e83821a4d8baf0a159ab069fb29c8083872b7c4b))
+
 ## [1.1.0](https://github.com/SashaBusinaro/yaml-compose-sorter/compare/v1.0.2...v1.1.0) (2026-09-14)
 
 
