@@ -22,7 +22,7 @@ jobs:
       pull-requests: read
     steps:
       - name: Check Conventional Commit PR Title
-        uses: amannn/action-semantic-pull-request@v5
+        uses: amannn/action-semantic-pull-request@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -48,8 +48,8 @@ jobs:
       - name: Run Unit Tests
         run: npm run test:unit
 
-  test-and-package:
-    name: Integration & Packaging
+  test:
+    name: test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
