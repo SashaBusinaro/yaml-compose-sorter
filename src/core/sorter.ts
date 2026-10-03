@@ -1,9 +1,7 @@
 import * as yaml from "yaml";
 import { SorterConfig } from "./types";
-import { DEFAULT_TRANSFORMABLE_LIST_KEYS } from "./constants";
 
 const MERGE_KEY_GROUP_INDEX = -999;
-const TRANSFORMABLE_KEYS_SET = new Set(DEFAULT_TRANSFORMABLE_LIST_KEYS);
 
 export class DockerComposeSorter {
   public static sort(yamlText: string, config: SorterConfig, indent: number = 2): string {
@@ -28,6 +26,8 @@ export class DockerComposeSorter {
     if (docs.length === 1 && (!docs[0].contents || !yaml.isMap(docs[0].contents))) {
       return yamlText;
     }
+
+    this.preserveDocumentHeaders(source, docs);
 
     const output = docs
       .map((doc, index) => this.processDocument(doc, config, indent, index > 0))
@@ -62,7 +62,7 @@ export class DockerComposeSorter {
 
     // 1. Remove Version if requested
     if (config.removeVersionKey && contents.has("version")) {
-      contents.delete("version");
+      this.removeVersion(doc, contents);
     }
 
     // 2. Sort Top Level
@@ -103,58 +103,209 @@ export class DockerComposeSorter {
     return doc.toString(stringifyOptions);
   }
 
+  private static preserveDocumentHeaders(source: string, docs: yaml.Document[]): void {
+    const needsHeader = (doc: yaml.Document): boolean =>
+      !doc.commentBefore &&
+      yaml.isMap(doc.contents) &&
+      !doc.contents.commentBefore &&
+      yaml.isNode(doc.contents.items[0]?.key) &&
+      Boolean(doc.contents.items[0].key.commentBefore);
+    if (!docs.some(needsHeader)) {
+      return;
+    }
+
+    // CST comments distinguish the file header from a first-key comment that
+    // follows a blank line. The AST parser otherwise combines these blocks.
+    let prelude: yaml.CST.SourceToken[] = [];
+    let documentIndex = 0;
+    for (const token of new yaml.Parser().parse(source)) {
+      if (token.type === "document") {
+        const doc = docs[documentIndex++];
+        if (doc && needsHeader(doc) && yaml.isMap(doc.contents)) {
+          const blocks: string[][] = [[]];
+          let newlines = 0;
+          for (const item of prelude) {
+            if (item.type === "comment") {
+              if (newlines > 1 && blocks[blocks.length - 1].length > 0) {
+                blocks.push([]);
+              }
+              blocks[blocks.length - 1].push(item.source.slice(1));
+              newlines = 0;
+            } else if (item.type === "newline") {
+              newlines++;
+            }
+          }
+          if (blocks[0].length > 0) {
+            doc.commentBefore = blocks[0].join("\n");
+            const firstKey = doc.contents.items[0].key as yaml.Node;
+            firstKey.commentBefore =
+              blocks
+                .slice(1)
+                .map((block) => block.join("\n"))
+                .join("\n\n") || undefined;
+          }
+        }
+        prelude = [];
+      } else if (token.type === "comment" || token.type === "newline" || token.type === "space") {
+        prelude.push(token);
+      } else {
+        prelude = [];
+      }
+    }
+  }
+
+  private static joinComments(...comments: (string | null | undefined)[]): string | undefined {
+    const present = comments.filter((comment): comment is string => Boolean(comment));
+    return present.length > 0 ? present.join("\n") : undefined;
+  }
+
+  private static removeVersion(doc: yaml.Document, contents: yaml.YAMLMap): void {
+    const pair = contents.items.find(
+      (item) => yaml.isScalar(item.key) && item.key.value === "version"
+    );
+    if (!pair) {
+      return;
+    }
+    const comments: string[] = [];
+    const anchoredNodes = new Set<yaml.Node>();
+    for (const node of [pair.key, pair.value]) {
+      if (yaml.isNode(node)) {
+        yaml.visit(node, {
+          Node(_, child) {
+            if (child.anchor) {
+              anchoredNodes.add(child);
+            }
+            if (child.commentBefore) {
+              comments.push(child.commentBefore);
+            }
+            if (child.comment) {
+              comments.push(child.comment);
+            }
+          }
+        });
+      }
+    }
+    let referenced = false;
+    if (anchoredNodes.size > 0) {
+      yaml.visit(doc, {
+        Alias(_, alias) {
+          const target = alias.resolve(doc);
+          if (target && anchoredNodes.has(target)) {
+            referenced = true;
+            return yaml.visit.BREAK;
+          }
+        }
+      });
+    }
+    // Deleting a referenced anchor would leave an invalid YAML document.
+    if (!referenced) {
+      contents.commentBefore = this.joinComments(contents.commentBefore, ...comments);
+      contents.delete("version");
+    }
+  }
+
   private static sortMap(
     map: yaml.YAMLMap,
     order: string[],
     extensionKeysFirst: boolean = false
   ): void {
-    map.items.sort((a, b) => {
-      const keyA = String(a.key);
-      const keyB = String(b.key);
+    this.sortPreservingAnchors(
+      map,
+      (a, b) => {
+        const keyA = String(a.key);
+        const keyB = String(b.key);
 
-      const idxA = order.indexOf(keyA);
-      const idxB = order.indexOf(keyB);
+        const idxA = order.indexOf(keyA);
+        const idxB = order.indexOf(keyB);
 
-      // Extension fields (x-*) usually hold YAML anchors, so they must stay
-      // before the keys that reference them. Keep their original relative
-      // order (anchors may reference each other) unless explicitly configured.
-      const extA = extensionKeysFirst && idxA === -1 && keyA.startsWith("x-");
-      const extB = extensionKeysFirst && idxB === -1 && keyB.startsWith("x-");
-      if (extA && extB) {
-        return 0;
-      }
-      if (extA) {
-        return -1;
-      }
-      if (extB) {
-        return 1;
-      }
+        // Extension fields (x-*) usually hold YAML anchors, so they must stay
+        // before the keys that reference them. Keep their original relative
+        // order (anchors may reference each other), including explicit key orders.
+        const extA = extensionKeysFirst && keyA.startsWith("x-");
+        const extB = extensionKeysFirst && keyB.startsWith("x-");
+        if (extA && extB) {
+          return 0;
+        }
+        if (extA) {
+          return -1;
+        }
+        if (extB) {
+          return 1;
+        }
 
-      // Prioritize YAML merge keys ("<<") to the top of mappings unless explicitly ordered
-      const isMergeA = keyA === "<<" && idxA === -1;
-      const isMergeB = keyB === "<<" && idxB === -1;
-      if (isMergeA && isMergeB) {
-        return 0;
-      }
-      if (isMergeA) {
-        return -1;
-      }
-      if (isMergeB) {
-        return 1;
-      }
+        // Prioritize YAML merge keys ("<<") to the top of mappings unless explicitly ordered
+        const isMergeA = keyA === "<<" && idxA === -1;
+        const isMergeB = keyB === "<<" && idxB === -1;
+        if (isMergeA && isMergeB) {
+          return 0;
+        }
+        if (isMergeA) {
+          return -1;
+        }
+        if (isMergeB) {
+          return 1;
+        }
 
-      if (idxA > -1 && idxB > -1) {
-        return idxA - idxB;
-      }
-      if (idxA > -1) {
-        return -1;
-      }
-      if (idxB > -1) {
-        return 1;
-      }
+        if (idxA > -1 && idxB > -1) {
+          return idxA - idxB;
+        }
+        if (idxA > -1) {
+          return -1;
+        }
+        if (idxB > -1) {
+          return 1;
+        }
 
-      return keyA.localeCompare(keyB);
+        return keyA.localeCompare(keyB);
+      },
+      extensionKeysFirst
+    );
+  }
+
+  /** Keep anchor/alias events and top-level extension fields in source order. */
+  private static sortPreservingAnchors(
+    map: yaml.YAMLMap,
+    compare: (a: yaml.Pair, b: yaml.Pair) => number,
+    preserveExtensionOrder: boolean = false
+  ): void {
+    const protectedPairs = map.items.filter((pair) => {
+      if (preserveExtensionOrder && String(pair.key).startsWith("x-")) {
+        return true;
+      }
+      return [pair.key, pair.value].some((node) => {
+        if (!yaml.isNode(node)) {
+          return false;
+        }
+        let hasAnchorOrAlias = false;
+        yaml.visit(node, {
+          Node(_, child) {
+            if (yaml.isAlias(child) || child.anchor) {
+              hasAnchorOrAlias = true;
+              return yaml.visit.BREAK;
+            }
+          }
+        });
+        return hasAnchorOrAlias;
+      });
     });
+    const protectedSet = new Set(protectedPairs);
+    const pending = [...map.items].sort(compare);
+    const sorted: yaml.Pair[] = [];
+    let nextProtected = 0;
+
+    // Take the highest-priority eligible pair. Unrelated keys remain sortable,
+    // while pairs containing anchors/aliases retain their original relative order.
+    while (pending.length > 0) {
+      const index = pending.findIndex(
+        (pair) => !protectedSet.has(pair) || pair === protectedPairs[nextProtected]
+      );
+      const [pair] = pending.splice(index, 1);
+      sorted.push(pair);
+      if (protectedSet.has(pair)) {
+        nextProtected++;
+      }
+    }
+    map.items = sorted;
   }
 
   private static getServiceKeyGroups(config: SorterConfig): string[][] | undefined {
@@ -180,7 +331,7 @@ export class DockerComposeSorter {
   private static sortMapByGroups(map: yaml.YAMLMap, groups: string[][]): void {
     const keyOrder = this.createGroupKeyOrder(groups);
 
-    map.items.sort((a, b) => {
+    this.sortPreservingAnchors(map, (a, b) => {
       const keyA = String(a.key);
       const keyB = String(b.key);
 
@@ -245,33 +396,81 @@ export class DockerComposeSorter {
   }
 
   private static transformListsToMaps(doc: yaml.Document): void {
-    yaml.visit(doc, {
-      Pair(_, pair) {
-        // Keys can be non-scalar (e.g. merge keys or complex keys): leave those untouched
+    type Context = "compose" | "services" | "service" | "build" | "deploy" | "hook";
+    const visited = new Map<yaml.Node, Set<Context>>();
+    const sequences = new Set<yaml.YAMLSeq>();
+    const resolve = (node: unknown): unknown => (yaml.isAlias(node) ? node.resolve(doc) : node);
+
+    const collect = (source: unknown, context: Context): void => {
+      const node = resolve(source);
+      if (!yaml.isMap(node)) {
+        return;
+      }
+      const contexts = visited.get(node) ?? new Set<Context>();
+      if (contexts.has(context)) {
+        return;
+      }
+      contexts.add(context);
+      visited.set(node, contexts);
+
+      for (const pair of node.items) {
         if (!yaml.isScalar(pair.key) || typeof pair.key.value !== "string") {
-          return undefined;
+          continue;
         }
-
         const key = pair.key.value;
-        // Restrict list-to-map conversion to recognized compose keys
-        if (!TRANSFORMABLE_KEYS_SET.has(key)) {
-          return undefined;
+        const value = resolve(pair.value);
+        if (key === "<<") {
+          // Only fragments actually used in a Compose context are transformed.
+          for (const fragment of yaml.isSeq(value) ? value.items : [value]) {
+            collect(fragment, context);
+          }
+        } else if (context === "compose") {
+          if (key === "services") {
+            collect(value, "services");
+          }
+        } else if (context === "services") {
+          if (!key.startsWith("x-")) {
+            collect(value, "service");
+          }
+        } else {
+          const transformable =
+            (key === "environment" && (context === "service" || context === "hook")) ||
+            (key === "labels" && context !== "hook") ||
+            (key === "extra_hosts" && (context === "service" || context === "build")) ||
+            (key === "args" && context === "build");
+          if (transformable && yaml.isSeq(value)) {
+            sequences.add(value);
+          } else if (context === "service") {
+            if (key === "build" || key === "deploy") {
+              collect(value, key);
+            } else if ((key === "post_start" || key === "pre_stop") && yaml.isSeq(value)) {
+              value.items.forEach((hook) => collect(hook, "hook"));
+            }
+          }
         }
+      }
+    };
 
-        if (yaml.isSeq(pair.value) && DockerComposeSorter.canTransformSeq(pair.value)) {
-          pair.value = DockerComposeSorter.seqToMap(pair.value);
+    if (yaml.isMap(doc.contents)) {
+      collect(doc.contents, "compose");
+    }
+    yaml.visit(doc, {
+      Seq(_, seq) {
+        if (sequences.has(seq) && DockerComposeSorter.canTransformSeq(seq)) {
+          return DockerComposeSorter.seqToMap(seq);
         }
       }
     });
   }
 
   private static canTransformSeq(seq: yaml.YAMLSeq): boolean {
-    if (seq.items.length === 0) {
+    if (seq.items.length === 0 || (seq.tag && seq.tag !== "!override" && seq.tag !== "!reset")) {
       return false;
     }
     const seenKeys = new Set<string>();
     return seq.items.every((item) => {
-      if (!yaml.isScalar(item) || typeof item.value !== "string") {
+      // Splitting an anchored/tagged scalar would change what its aliases mean.
+      if (!yaml.isScalar(item) || typeof item.value !== "string" || item.anchor || item.tag) {
         return false;
       }
       const str = item.value;
@@ -280,7 +479,7 @@ export class DockerComposeSorter {
       if (eqIndex <= 0 || str.slice(0, eqIndex).trim().length === 0) {
         return false;
       }
-      const key = str.slice(0, eqIndex).trim();
+      const key = str.slice(0, eqIndex);
       if (seenKeys.has(key)) {
         return false;
       }
@@ -290,7 +489,11 @@ export class DockerComposeSorter {
   }
 
   private static seqToMap(seq: yaml.YAMLSeq): yaml.YAMLMap {
-    const map = new yaml.YAMLMap();
+    const map = new yaml.YAMLMap(seq.schema);
+    map.anchor = seq.anchor;
+    map.tag = seq.tag;
+    map.flow = seq.flow;
+    map.spaceBefore = seq.spaceBefore;
     if (seq.commentBefore) {
       map.commentBefore = seq.commentBefore;
     }
@@ -301,7 +504,7 @@ export class DockerComposeSorter {
     seq.items.forEach((item) => {
       if (yaml.isScalar(item) && typeof item.value === "string") {
         const eqIndex = item.value.indexOf("=");
-        const key = item.value.slice(0, eqIndex).trim();
+        const key = item.value.slice(0, eqIndex);
         const val = item.value.slice(eqIndex + 1);
 
         // Preserve comments
@@ -312,6 +515,7 @@ export class DockerComposeSorter {
         if (item.commentBefore) {
           pair.key!.commentBefore = item.commentBefore;
         }
+        pair.key!.spaceBefore = item.spaceBefore;
 
         map.add(pair);
       }

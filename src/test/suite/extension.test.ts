@@ -172,7 +172,7 @@ suite("Extension and VS Code Integration Test Suite", () => {
     const provider = new DockerComposeFormattingProvider();
     const doc = await vscode.workspace.openTextDocument({
       language: "yaml",
-      content: "services:\n  app:\n    image: node\n"
+      content: "services:\n    app:\n        image: node\n"
     });
 
     const edits = provider.provideDocumentFormattingEdits(
@@ -181,7 +181,8 @@ suite("Extension and VS Code Integration Test Suite", () => {
       new vscode.CancellationTokenSource().token
     );
 
-    assert.ok(Array.isArray(edits), "Expected edits array");
+    assert.strictEqual(edits.length, 1);
+    assert.strictEqual(edits[0].newText, "services:\n  app:\n    image: node\n");
   });
 
   /*
@@ -247,13 +248,13 @@ suite("Extension and VS Code Integration Test Suite", () => {
   test("Executing 'yaml-compose-sorter.sort' with custom tabSize option", async () => {
     const doc = await vscode.workspace.openTextDocument({
       language: "yaml",
-      content: "services: {}\nversion: '3.8'\n"
+      content: "services:\n  app:\n    image: node\n"
     });
     const editor = await vscode.window.showTextDocument(doc);
     editor.options.tabSize = 4;
     editor.options.insertSpaces = true;
 
     await vscode.commands.executeCommand("yaml-compose-sorter.sort");
-    assert.ok(doc.getText().includes("version:"));
+    assert.strictEqual(doc.getText(), "services:\n    app:\n        image: node\n");
   });
 });

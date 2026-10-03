@@ -56,14 +56,12 @@ You can trigger the sort manually at any time:
 
 ## Supported Files
 
-The extension activates automatically for:
-
-1. Files with the `dockercompose`, `jinja`, or `jinja-yaml` Language Mode.
-2. Files matching these patterns:
+The formatter supports any file with the `dockercompose` Language Mode, plus Compose files in `yaml`, `jinja`, `jinja-yaml`, or `plaintext` mode matching these patterns:
 
 - `docker-compose.yaml` / `.yml` (and `.j2` template variants)
 - `compose.yaml` / `.yml` (and `.j2` template variants)
-- `*.docker-compose.yaml` / `*.compose.yaml` (and `.j2` template variants)
+- `docker-compose.prod.yaml` / `compose.dev.yaml` and similar `docker-compose.*.yml` / `compose.*.yml` variants (including `.j2` templates)
+- Names starting with `docker-compose` or `compose` and ending in `.j2`, `.jinja`, or `.jinja2`
 
 > [!NOTE]
 > For Jinja2 templates (`.j2`, `.jinja`, `.jinja2`), variable interpolations must be quoted (e.g., `image: "{{ web_image }}"`) to adhere to standard YAML syntax and ensure clean AST parsing.
@@ -110,6 +108,10 @@ Grouped service sorting is disabled by default. Set `useServiceKeyGroups` to `tr
 
 If you enable `transformKeyValueLists`, the extension converts array-based configurations into cleaner YAML maps.
 
+Conversion applies to service `environment`, `labels`, and `extra_hosts`; build `args`, `labels`, and `extra_hosts`; deploy `labels`; and lifecycle-hook `environment`. Aliases and merged fragments used in these contexts are supported. Unused extension data and unrelated fields are preserved.
+
+Collection anchors, comments, blank lines, and Compose `!override` / `!reset` tags survive conversion. Lists containing anchored or explicitly tagged scalar items, duplicate keys, or entries without `=` are left unchanged. Whitespace in key names is preserved.
+
 **Before:**
 
 ```yaml
@@ -134,7 +136,9 @@ You can see an example configuration in the file `example-settings.json` include
 
 - **Line endings**: the original line endings of the file (LF or CRLF) are preserved.
 - **Multi-document files**: files containing multiple YAML documents separated by `---` are fully supported — every document is sorted and none is dropped.
-- **Extension fields (`x-*`)**: top-level extension fields not listed in `topLevelKeyOrder` are placed at the top of the file, keeping their original relative order. This guarantees YAML anchors defined in `x-*` blocks stay above the services that reference them.
+- **Comments**: file headers stay at the start, and comments associated with other keys move with those keys. Comments on a removed `version` key are retained at the start of the document.
+- **Extension fields (`x-*`) and anchors**: top-level extension fields keep their original relative order and are normally placed before Compose sections, including when they appear in a custom key order. The relative order of blocks containing anchors or aliases takes precedence over configured sorting, preserving forward-reference validity and shadowed anchor bindings.
+- **Version removal**: a `version` key that defines an anchor still referenced elsewhere is retained to keep the document valid.
 - **Indentation**: the indent width follows your editor settings (`editor.tabSize`). Since YAML forbids tab indentation, 2 spaces are used when the editor is configured for tabs.
 - **Blank lines**: consecutive blank lines are normalized to a single blank line.
 

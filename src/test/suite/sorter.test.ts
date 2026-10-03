@@ -1,8 +1,371 @@
 import assert from "node:assert/strict";
+import * as yaml from "yaml";
 import { DockerComposeSorter, SorterConfig } from "../../core";
 import { cleanConfig, DEFAULT_SERVICE_KEY_GROUPS } from "../helpers";
 
 suite("DockerComposeSorter Test Suite", () => {
+  suite("Document header regressions", () => {
+    test("Keeps an adjacent file header above reordered top-level keys", () => {
+      const input = `# File header
+services: {}
+# Version note
+version: "3.8"
+`;
+      const config = cleanConfig();
+      const result = DockerComposeSorter.sort(input, config);
+      assert.ok(result.startsWith('# File header\n\n# Version note\nversion: "3.8"'));
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+
+    test("Keeps key comments attached when changing the order of a formatted file", () => {
+      const input = `# File header
+services: {}
+# Version note
+version: "3.8"
+`;
+      const first = DockerComposeSorter.sort(input, cleanConfig());
+      const config = cleanConfig({ topLevelKeyOrder: ["services", "version"] });
+      const result = DockerComposeSorter.sort(first, config);
+      assert.ok(result.startsWith("# File header\n\nservices:"));
+      assert.ok(result.includes('# Version note\nversion: "3.8"'));
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+
+    test("Preserves header and version comments when removing version", () => {
+      const input = `# File header
+version:
+  # Version value note
+  "3.8" # Inline version note
+# Services note
+services: {}
+`;
+      const config = cleanConfig({ removeVersionKey: true });
+      const result = DockerComposeSorter.sort(input, config);
+      assert.ok(!yaml.parse(result).version);
+      for (const comment of [
+        "# File header",
+        "# Version value note",
+        "# Inline version note",
+        "# Services note"
+      ]) {
+        assert.ok(result.includes(comment), `Missing ${comment}`);
+        assert.ok(result.indexOf(comment) < result.indexOf("services:"));
+      }
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+
+    test("Preserves comments when version is the only key", () => {
+      const input = '# File header\nversion: "3.8" # Version note\n';
+      const config = cleanConfig({ removeVersionKey: true });
+      const result = DockerComposeSorter.sort(input, config);
+      assert.ok(result.startsWith("# File header\n\n# Version note\n"));
+      assert.deepStrictEqual(yaml.parse(result), {});
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+
+    test("Preserves headers on both sides of an existing separator", () => {
+      const input = `# Before separator
+---
+# After separator
+services: {}
+version: "3.8"
+`;
+      const config = cleanConfig({ addDocumentSeparator: true });
+      const result = DockerComposeSorter.sort(input, config);
+      assert.ok(result.startsWith('# Before separator\n---\n# After separator\nversion: "3.8"'));
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+
+    test("Preserves independent headers across CRLF documents", () => {
+      const input =
+        '# First\nservices: {}\nversion: "3"\n---\n# Second\nservices: {}\nversion: "3"\n'.replace(
+          /\n/g,
+          "\r\n"
+        );
+      const config = cleanConfig();
+      const result = DockerComposeSorter.sort(input, config);
+      assert.ok(result.startsWith('# First\r\n\r\nversion: "3"'));
+      assert.ok(result.includes('---\r\n# Second\r\nversion: "3"'));
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+
+    test("Does not remove a version anchor still used elsewhere", () => {
+      const input = `version: &version "3.8"
+x-version: *version
+services: {}
+`;
+      const config = cleanConfig({ removeVersionKey: true });
+      const result = DockerComposeSorter.sort(input, config);
+      assert.deepStrictEqual(yaml.parse(result), yaml.parse(input));
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+  });
+
+  suite("Compose list conversion regressions", () => {
+    const config = cleanConfig({ transformKeyValueLists: true });
+
+    test("Preserves whitespace in label names", () => {
+      const input = `services:
+  app:
+    labels: [" team =platform"]
+`;
+      const result = DockerComposeSorter.sort(input, config);
+      assert.deepStrictEqual(yaml.parse(result).services.app.labels, { " team ": "platform" });
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+
+    for (const tag of ["!override", "!reset"]) {
+      test(`Preserves ${tag} on converted Compose lists`, () => {
+        const input = `services:
+  app:
+    environment: ${tag}
+      - FOO=override
+`;
+        const result = DockerComposeSorter.sort(input, config);
+        const doc = yaml.parseDocument(result);
+        const environment = doc.getIn(["services", "app", "environment"], true);
+        assert.ok(yaml.isMap(environment));
+        assert.strictEqual(environment.tag, tag);
+        assert.strictEqual(environment.get("FOO"), "override");
+        assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+      });
+    }
+
+    test("Preserves collection anchors and aliases during conversion", () => {
+      const input = `services:
+  a:
+    environment: &env
+      - FOO=bar
+  b:
+    environment: *env
+`;
+      const result = DockerComposeSorter.sort(input, config);
+      const data = yaml.parse(result);
+      assert.deepStrictEqual(data.services.a.environment, { FOO: "bar" });
+      assert.strictEqual(data.services.a.environment, data.services.b.environment);
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+
+    test("Converts lists referenced from a Compose field via an alias", () => {
+      const input = `x-env: &env [FOO=bar]
+services:
+  app:
+    environment: *env
+`;
+      const result = DockerComposeSorter.sort(input, config);
+      assert.deepStrictEqual(yaml.parse(result).services.app.environment, { FOO: "bar" });
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+
+    test("Leaves anchored list items intact so scalar aliases retain their value", () => {
+      const input = `services:
+  a:
+    environment:
+      - &var FOO=bar
+  b:
+    environment:
+      - *var
+`;
+      const result = DockerComposeSorter.sort(input, config);
+      assert.deepStrictEqual(yaml.parse(result), yaml.parse(input));
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+
+    test("Leaves explicit sequence tags and tagged items untouched", () => {
+      const input = `services:
+  app:
+    environment: !!seq [FOO=bar]
+    labels: [!!str FOO=bar]
+`;
+      const result = DockerComposeSorter.sort(input, config);
+      assert.deepStrictEqual(yaml.parse(result), yaml.parse(input));
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+
+    test("Does not transform arbitrary data in extension fields", () => {
+      const input = `x-custom:
+  environment: [FOO=bar]
+  labels: [KEY=value]
+  args: [--flag=on]
+services:
+  app:
+    image: nginx
+    x-command:
+      args: [--flag=on]
+      labels: [KEY=value]
+    x-hook:
+      environment: [FOO=bar]
+  x-metadata:
+    environment: [FOO=bar]
+`;
+      const result = DockerComposeSorter.sort(input, config);
+      assert.deepStrictEqual(yaml.parse(result), yaml.parse(input));
+    });
+
+    test("Transforms Compose build, deploy, and lifecycle hook lists", () => {
+      const input = `services:
+  app:
+    build:
+      context: .
+      args: [FOO=bar]
+      labels: [KEY=value]
+      extra_hosts: [host=127.0.0.1]
+    deploy:
+      labels: [KEY=value]
+    post_start:
+      - command: echo
+        environment: [FOO=bar]
+    pre_stop:
+      - command: echo
+        environment: [FOO=bar]
+`;
+      const result = DockerComposeSorter.sort(input, config);
+      const app = yaml.parse(result).services.app;
+      assert.deepStrictEqual(app.build.args, { FOO: "bar" });
+      assert.deepStrictEqual(app.build.labels, { KEY: "value" });
+      assert.deepStrictEqual(app.build.extra_hosts, { host: "127.0.0.1" });
+      assert.deepStrictEqual(app.deploy.labels, { KEY: "value" });
+      assert.deepStrictEqual(app.post_start[0].environment, { FOO: "bar" });
+      assert.deepStrictEqual(app.pre_stop[0].environment, { FOO: "bar" });
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+
+    test("Transforms used Compose fragments but preserves unused extensions", () => {
+      const input = `x-unused:
+  environment: [UNUSED=yes]
+x-service: &service
+  environment: [FOO=bar]
+x-build: &build
+  args: [ARG=value]
+services:
+  app:
+    <<: *service
+    build: *build
+`;
+      const result = DockerComposeSorter.sort(input, config);
+      const data = yaml.parse(result, { merge: true });
+      assert.deepStrictEqual(data["x-unused"].environment, ["UNUSED=yes"]);
+      assert.deepStrictEqual(data.services.app.environment, { FOO: "bar" });
+      assert.deepStrictEqual(data.services.app.build.args, { ARG: "value" });
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+
+    test("Recognizes services inherited through a top-level merge", () => {
+      const input = `x-compose: &compose
+  services:
+    app:
+      environment: [FOO=bar]
+<<: *compose
+`;
+      const result = DockerComposeSorter.sort(input, config);
+      assert.deepStrictEqual(yaml.parse(result, { merge: true }).services.app.environment, {
+        FOO: "bar"
+      });
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+
+    test("Preserves blank lines and comments between converted entries", () => {
+      const input = `services:
+  app:
+    environment:
+      - FOO=bar # First
+
+      # Second
+      - BAR=baz
+`;
+      const result = DockerComposeSorter.sort(input, config);
+      assert.ok(result.includes("FOO: bar # First\n\n      # Second\n      BAR: baz"));
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+  });
+
+  suite("Anchor ordering regressions", () => {
+    test("Preserves the original order of explicitly configured extension fields", () => {
+      const input = `x-first: {}
+x-second: {}
+services: {}
+`;
+      const config = cleanConfig({ topLevelKeyOrder: ["services", "x-second", "x-first"] });
+      const result = DockerComposeSorter.sort(input, config);
+      assert.deepStrictEqual(Object.keys(yaml.parse(result)), ["x-first", "x-second", "services"]);
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+
+    test("Keeps extension order when an extension depends on a standard section", () => {
+      const input = `services: &services { app: { image: nginx } }
+x-dependent: *services
+x-unrelated: {}
+`;
+      const config = cleanConfig();
+      const result = DockerComposeSorter.sort(input, config);
+      assert.deepStrictEqual(Object.keys(yaml.parse(result)), [
+        "services",
+        "x-dependent",
+        "x-unrelated"
+      ]);
+      assert.deepStrictEqual(yaml.parse(result), yaml.parse(input));
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+
+    for (const useServiceKeyGroups of [false, true]) {
+      test(`Preserves service-local anchors (groups=${useServiceKeyGroups})`, () => {
+        const input = `services:
+  web:
+    x-env: &env { FOO: service }
+    environment: *env
+    image: nginx
+`;
+        const config = cleanConfig({ useServiceKeyGroups });
+        const result = DockerComposeSorter.sort(input, config);
+        assert.deepStrictEqual(yaml.parse(result), yaml.parse(input));
+        assert.ok(result.indexOf("image: nginx") < result.indexOf("x-env:"));
+        assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+      });
+
+      test(`Preserves shadowed anchor bindings (groups=${useServiceKeyGroups})`, () => {
+        const input = `x-root: &env { FOO: root }
+services:
+  web:
+    x-env: &env { FOO: service }
+    environment: *env
+    image: nginx
+`;
+        const config = cleanConfig({ useServiceKeyGroups });
+        const result = DockerComposeSorter.sort(input, config);
+        assert.deepStrictEqual(yaml.parse(result), yaml.parse(input));
+        assert.strictEqual(yaml.parse(result).services.web.environment.FOO, "service");
+        assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+      });
+    }
+
+    test("Preserves anchors in standard top-level sections", () => {
+      const input = `networks: &shared { default: {} }
+services:
+  web:
+    image: nginx
+    networks: *shared
+`;
+      const result = DockerComposeSorter.sort(input, cleanConfig());
+      assert.deepStrictEqual(yaml.parse(result), yaml.parse(input));
+      assert.strictEqual(DockerComposeSorter.sort(result, cleanConfig()), result);
+    });
+
+    test("Anchor dependencies take precedence over explicit extension-field ordering", () => {
+      const input = `x-base: &base { image: nginx }
+x-child: &child { <<: *base }
+services:
+  web: { <<: *child }
+`;
+      const config = cleanConfig({ topLevelKeyOrder: ["services", "x-child", "x-base"] });
+      const result = DockerComposeSorter.sort(input, config);
+      assert.deepStrictEqual(
+        yaml.parse(result, { merge: true }),
+        yaml.parse(input, { merge: true })
+      );
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+  });
+
   /*
    * ==========================================
    * 1. Sorting Tests
