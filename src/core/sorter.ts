@@ -27,6 +27,8 @@ export class DockerComposeSorter {
       return yamlText;
     }
 
+    this.preserveDocumentHeaders(source, docs);
+
     const output = docs
       .map((doc, index) => this.processDocument(doc, config, indent, index > 0))
       .join("");
@@ -57,14 +59,6 @@ export class DockerComposeSorter {
     }
 
     const contents = doc.contents as yaml.YAMLMap;
-
-    // The parser attaches an adjacent root header to the first key. Promote it
-    // to the mapping so it stays at the start when that key moves or is removed.
-    const firstKey = contents.items[0]?.key;
-    if (yaml.isNode(firstKey) && firstKey.commentBefore) {
-      contents.commentBefore = this.joinComments(contents.commentBefore, firstKey.commentBefore);
-      firstKey.commentBefore = undefined;
-    }
 
     // 1. Remove Version if requested
     if (config.removeVersionKey && contents.has("version")) {
@@ -107,6 +101,57 @@ export class DockerComposeSorter {
 
     // 6. Serialize
     return doc.toString(stringifyOptions);
+  }
+
+  private static preserveDocumentHeaders(source: string, docs: yaml.Document[]): void {
+    const needsHeader = (doc: yaml.Document): boolean =>
+      !doc.commentBefore &&
+      yaml.isMap(doc.contents) &&
+      !doc.contents.commentBefore &&
+      yaml.isNode(doc.contents.items[0]?.key) &&
+      Boolean(doc.contents.items[0].key.commentBefore);
+    if (!docs.some(needsHeader)) {
+      return;
+    }
+
+    // CST comments distinguish the file header from a first-key comment that
+    // follows a blank line. The AST parser otherwise combines these blocks.
+    let prelude: yaml.CST.SourceToken[] = [];
+    let documentIndex = 0;
+    for (const token of new yaml.Parser().parse(source)) {
+      if (token.type === "document") {
+        const doc = docs[documentIndex++];
+        if (doc && needsHeader(doc) && yaml.isMap(doc.contents)) {
+          const blocks: string[][] = [[]];
+          let newlines = 0;
+          for (const item of prelude) {
+            if (item.type === "comment") {
+              if (newlines > 1 && blocks[blocks.length - 1].length > 0) {
+                blocks.push([]);
+              }
+              blocks[blocks.length - 1].push(item.source.slice(1));
+              newlines = 0;
+            } else if (item.type === "newline") {
+              newlines++;
+            }
+          }
+          if (blocks[0].length > 0) {
+            doc.commentBefore = blocks[0].join("\n");
+            const firstKey = doc.contents.items[0].key as yaml.Node;
+            firstKey.commentBefore =
+              blocks
+                .slice(1)
+                .map((block) => block.join("\n"))
+                .join("\n\n") || undefined;
+          }
+        }
+        prelude = [];
+      } else if (token.type === "comment" || token.type === "newline" || token.type === "space") {
+        prelude.push(token);
+      } else {
+        prelude = [];
+      }
+    }
   }
 
   private static joinComments(...comments: (string | null | undefined)[]): string | undefined {
@@ -164,62 +209,70 @@ export class DockerComposeSorter {
     order: string[],
     extensionKeysFirst: boolean = false
   ): void {
-    this.sortPreservingAnchors(map, (a, b) => {
-      const keyA = String(a.key);
-      const keyB = String(b.key);
+    this.sortPreservingAnchors(
+      map,
+      (a, b) => {
+        const keyA = String(a.key);
+        const keyB = String(b.key);
 
-      const idxA = order.indexOf(keyA);
-      const idxB = order.indexOf(keyB);
+        const idxA = order.indexOf(keyA);
+        const idxB = order.indexOf(keyB);
 
-      // Extension fields (x-*) usually hold YAML anchors, so they must stay
-      // before the keys that reference them. Keep their original relative
-      // order (anchors may reference each other) unless explicitly configured.
-      const extA = extensionKeysFirst && idxA === -1 && keyA.startsWith("x-");
-      const extB = extensionKeysFirst && idxB === -1 && keyB.startsWith("x-");
-      if (extA && extB) {
-        return 0;
-      }
-      if (extA) {
-        return -1;
-      }
-      if (extB) {
-        return 1;
-      }
+        // Extension fields (x-*) usually hold YAML anchors, so they must stay
+        // before the keys that reference them. Keep their original relative
+        // order (anchors may reference each other), including explicit key orders.
+        const extA = extensionKeysFirst && keyA.startsWith("x-");
+        const extB = extensionKeysFirst && keyB.startsWith("x-");
+        if (extA && extB) {
+          return 0;
+        }
+        if (extA) {
+          return -1;
+        }
+        if (extB) {
+          return 1;
+        }
 
-      // Prioritize YAML merge keys ("<<") to the top of mappings unless explicitly ordered
-      const isMergeA = keyA === "<<" && idxA === -1;
-      const isMergeB = keyB === "<<" && idxB === -1;
-      if (isMergeA && isMergeB) {
-        return 0;
-      }
-      if (isMergeA) {
-        return -1;
-      }
-      if (isMergeB) {
-        return 1;
-      }
+        // Prioritize YAML merge keys ("<<") to the top of mappings unless explicitly ordered
+        const isMergeA = keyA === "<<" && idxA === -1;
+        const isMergeB = keyB === "<<" && idxB === -1;
+        if (isMergeA && isMergeB) {
+          return 0;
+        }
+        if (isMergeA) {
+          return -1;
+        }
+        if (isMergeB) {
+          return 1;
+        }
 
-      if (idxA > -1 && idxB > -1) {
-        return idxA - idxB;
-      }
-      if (idxA > -1) {
-        return -1;
-      }
-      if (idxB > -1) {
-        return 1;
-      }
+        if (idxA > -1 && idxB > -1) {
+          return idxA - idxB;
+        }
+        if (idxA > -1) {
+          return -1;
+        }
+        if (idxB > -1) {
+          return 1;
+        }
 
-      return keyA.localeCompare(keyB);
-    });
+        return keyA.localeCompare(keyB);
+      },
+      extensionKeysFirst
+    );
   }
 
-  /** Keep anchor/alias events in source order, including shadowed anchor names. */
+  /** Keep anchor/alias events and top-level extension fields in source order. */
   private static sortPreservingAnchors(
     map: yaml.YAMLMap,
-    compare: (a: yaml.Pair, b: yaml.Pair) => number
+    compare: (a: yaml.Pair, b: yaml.Pair) => number,
+    preserveExtensionOrder: boolean = false
   ): void {
-    const protectedPairs = map.items.filter((pair) =>
-      [pair.key, pair.value].some((node) => {
+    const protectedPairs = map.items.filter((pair) => {
+      if (preserveExtensionOrder && String(pair.key).startsWith("x-")) {
+        return true;
+      }
+      return [pair.key, pair.value].some((node) => {
         if (!yaml.isNode(node)) {
           return false;
         }
@@ -233,8 +286,8 @@ export class DockerComposeSorter {
           }
         });
         return hasAnchorOrAlias;
-      })
-    );
+      });
+    });
     const protectedSet = new Set(protectedPairs);
     const pending = [...map.items].sort(compare);
     const sorted: yaml.Pair[] = [];
@@ -426,7 +479,7 @@ export class DockerComposeSorter {
       if (eqIndex <= 0 || str.slice(0, eqIndex).trim().length === 0) {
         return false;
       }
-      const key = str.slice(0, eqIndex).trim();
+      const key = str.slice(0, eqIndex);
       if (seenKeys.has(key)) {
         return false;
       }
@@ -451,7 +504,7 @@ export class DockerComposeSorter {
     seq.items.forEach((item) => {
       if (yaml.isScalar(item) && typeof item.value === "string") {
         const eqIndex = item.value.indexOf("=");
-        const key = item.value.slice(0, eqIndex).trim();
+        const key = item.value.slice(0, eqIndex);
         const val = item.value.slice(eqIndex + 1);
 
         // Preserve comments
