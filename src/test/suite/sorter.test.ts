@@ -4,6 +4,89 @@ import { DockerComposeSorter, SorterConfig } from "../../core";
 import { cleanConfig, DEFAULT_SERVICE_KEY_GROUPS } from "../helpers";
 
 suite("DockerComposeSorter Test Suite", () => {
+  suite("Document header regressions", () => {
+    test("Keeps an adjacent file header above reordered top-level keys", () => {
+      const input = `# File header
+services: {}
+# Version note
+version: "3.8"
+`;
+      const config = cleanConfig();
+      const result = DockerComposeSorter.sort(input, config);
+      assert.ok(result.startsWith('# File header\n# Version note\nversion: "3.8"'));
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+
+    test("Preserves header and version comments when removing version", () => {
+      const input = `# File header
+version:
+  # Version value note
+  "3.8" # Inline version note
+# Services note
+services: {}
+`;
+      const config = cleanConfig({ removeVersionKey: true });
+      const result = DockerComposeSorter.sort(input, config);
+      assert.ok(!yaml.parse(result).version);
+      for (const comment of [
+        "# File header",
+        "# Version value note",
+        "# Inline version note",
+        "# Services note"
+      ]) {
+        assert.ok(result.includes(comment), `Missing ${comment}`);
+        assert.ok(result.indexOf(comment) < result.indexOf("services:"));
+      }
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+
+    test("Preserves comments when version is the only key", () => {
+      const input = '# File header\nversion: "3.8" # Version note\n';
+      const config = cleanConfig({ removeVersionKey: true });
+      const result = DockerComposeSorter.sort(input, config);
+      assert.ok(result.startsWith("# File header\n# Version note\n"));
+      assert.deepStrictEqual(yaml.parse(result), {});
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+
+    test("Preserves headers on both sides of an existing separator", () => {
+      const input = `# Before separator
+---
+# After separator
+services: {}
+version: "3.8"
+`;
+      const config = cleanConfig({ addDocumentSeparator: true });
+      const result = DockerComposeSorter.sort(input, config);
+      assert.ok(result.startsWith('# Before separator\n---\n# After separator\nversion: "3.8"'));
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+
+    test("Preserves independent headers across CRLF documents", () => {
+      const input =
+        '# First\nservices: {}\nversion: "3"\n---\n# Second\nservices: {}\nversion: "3"\n'.replace(
+          /\n/g,
+          "\r\n"
+        );
+      const config = cleanConfig();
+      const result = DockerComposeSorter.sort(input, config);
+      assert.ok(result.startsWith('# First\r\nversion: "3"'));
+      assert.ok(result.includes('---\r\n# Second\r\nversion: "3"'));
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+
+    test("Does not remove a version anchor still used elsewhere", () => {
+      const input = `version: &version "3.8"
+x-version: *version
+services: {}
+`;
+      const config = cleanConfig({ removeVersionKey: true });
+      const result = DockerComposeSorter.sort(input, config);
+      assert.deepStrictEqual(yaml.parse(result), yaml.parse(input));
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+  });
+
   suite("Compose list conversion regressions", () => {
     const config = cleanConfig({ transformKeyValueLists: true });
 

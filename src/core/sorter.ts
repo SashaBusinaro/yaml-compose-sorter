@@ -58,9 +58,17 @@ export class DockerComposeSorter {
 
     const contents = doc.contents as yaml.YAMLMap;
 
+    // The parser attaches an adjacent root header to the first key. Promote it
+    // to the mapping so it stays at the start when that key moves or is removed.
+    const firstKey = contents.items[0]?.key;
+    if (yaml.isNode(firstKey) && firstKey.commentBefore) {
+      contents.commentBefore = this.joinComments(contents.commentBefore, firstKey.commentBefore);
+      firstKey.commentBefore = undefined;
+    }
+
     // 1. Remove Version if requested
     if (config.removeVersionKey && contents.has("version")) {
-      contents.delete("version");
+      this.removeVersion(doc, contents);
     }
 
     // 2. Sort Top Level
@@ -99,6 +107,56 @@ export class DockerComposeSorter {
 
     // 6. Serialize
     return doc.toString(stringifyOptions);
+  }
+
+  private static joinComments(...comments: (string | null | undefined)[]): string | undefined {
+    const present = comments.filter((comment): comment is string => Boolean(comment));
+    return present.length > 0 ? present.join("\n") : undefined;
+  }
+
+  private static removeVersion(doc: yaml.Document, contents: yaml.YAMLMap): void {
+    const pair = contents.items.find(
+      (item) => yaml.isScalar(item.key) && item.key.value === "version"
+    );
+    if (!pair) {
+      return;
+    }
+    const comments: string[] = [];
+    const anchoredNodes = new Set<yaml.Node>();
+    for (const node of [pair.key, pair.value]) {
+      if (yaml.isNode(node)) {
+        yaml.visit(node, {
+          Node(_, child) {
+            if (child.anchor) {
+              anchoredNodes.add(child);
+            }
+            if (child.commentBefore) {
+              comments.push(child.commentBefore);
+            }
+            if (child.comment) {
+              comments.push(child.comment);
+            }
+          }
+        });
+      }
+    }
+    let referenced = false;
+    if (anchoredNodes.size > 0) {
+      yaml.visit(doc, {
+        Alias(_, alias) {
+          const target = alias.resolve(doc);
+          if (target && anchoredNodes.has(target)) {
+            referenced = true;
+            return yaml.visit.BREAK;
+          }
+        }
+      });
+    }
+    // Deleting a referenced anchor would leave an invalid YAML document.
+    if (!referenced) {
+      contents.commentBefore = this.joinComments(contents.commentBefore, ...comments);
+      contents.delete("version");
+    }
   }
 
   private static sortMap(
