@@ -12,6 +12,10 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
@@ -22,6 +26,20 @@ jobs:
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      # GITHUB_TOKEN-created PRs cannot start CI unattended. workflow_dispatch
+      # is explicitly supported and uses the release PR's current head commit.
+      - name: Run CI for release pull requests
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_PRS: ${{ steps.release.outputs.prs }}
+        run: |
+          jq -r '.[].headBranchName' <<< "$RELEASE_PRS" |
+          while IFS= read -r branch; do
+            gh workflow run ci.yml --ref "$branch"
+          done
 
   # Publishing happens here because releases created with the automatic
   # GITHUB_TOKEN do not trigger other workflows (publish.yml stays as a
