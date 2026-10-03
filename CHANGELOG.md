@@ -3,6 +3,19 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2](https://github.com/SashaBusinaro/yaml-compose-sorter/compare/v1.1.1...v1.1.2) (2026-10-03)
+
+
+### Bug Fixes
+
+* activate compose formatting for plaintext templates ([ff2233b](https://github.com/SashaBusinaro/yaml-compose-sorter/commit/ff2233b8c8d6d4d900e2cee13b1928a234a2d659))
+* preserve anchor bindings when sorting compose keys ([595129d](https://github.com/SashaBusinaro/yaml-compose-sorter/commit/595129d98de0b302723ac706f14c5faba4d4ce26))
+* preserve compose semantics, comments and template activation ([59e0ec5](https://github.com/SashaBusinaro/yaml-compose-sorter/commit/59e0ec5d10541c2ce8699e806bb3ffe8f77d943a))
+* preserve compose semantics, comments and template activation ([#63](https://github.com/SashaBusinaro/yaml-compose-sorter/issues/63)) ([59e0ec5](https://github.com/SashaBusinaro/yaml-compose-sorter/commit/59e0ec5d10541c2ce8699e806bb3ffe8f77d943a))
+* preserve compose tags and scope list conversion ([6d1a212](https://github.com/SashaBusinaro/yaml-compose-sorter/commit/6d1a2123840baf35c83b08be9fafe3cd00b0e108))
+* preserve header boundaries and literal compose keys ([7a21f87](https://github.com/SashaBusinaro/yaml-compose-sorter/commit/7a21f8709fe5ca0d25a0cee253f079cb0fb5792d))
+* retain document headers and removed version comments ([9b6ec04](https://github.com/SashaBusinaro/yaml-compose-sorter/commit/9b6ec046cf43af8647debd2d8b30a50734592249))
+
 ## [1.1.1](https://github.com/SashaBusinaro/yaml-compose-sorter/compare/v1.1.0...v1.1.1) (2026-09-15)
 
 
