@@ -41,6 +41,7 @@
   "activationEvents": [
     "onLanguage:yaml",
     "onLanguage:dockercompose",
+    "onLanguage:plaintext",
     "onLanguage:jinja",
     "onLanguage:jinja-yaml"
   ],
