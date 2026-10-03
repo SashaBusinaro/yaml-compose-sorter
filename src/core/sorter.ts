@@ -108,7 +108,7 @@ export class DockerComposeSorter {
     order: string[],
     extensionKeysFirst: boolean = false
   ): void {
-    map.items.sort((a, b) => {
+    this.sortPreservingAnchors(map, (a, b) => {
       const keyA = String(a.key);
       const keyB = String(b.key);
 
@@ -157,6 +157,48 @@ export class DockerComposeSorter {
     });
   }
 
+  /** Keep anchor/alias events in source order, including shadowed anchor names. */
+  private static sortPreservingAnchors(
+    map: yaml.YAMLMap,
+    compare: (a: yaml.Pair, b: yaml.Pair) => number
+  ): void {
+    const protectedPairs = map.items.filter((pair) =>
+      [pair.key, pair.value].some((node) => {
+        if (!yaml.isNode(node)) {
+          return false;
+        }
+        let hasAnchorOrAlias = false;
+        yaml.visit(node, {
+          Node(_, child) {
+            if (yaml.isAlias(child) || child.anchor) {
+              hasAnchorOrAlias = true;
+              return yaml.visit.BREAK;
+            }
+          }
+        });
+        return hasAnchorOrAlias;
+      })
+    );
+    const protectedSet = new Set(protectedPairs);
+    const pending = [...map.items].sort(compare);
+    const sorted: yaml.Pair[] = [];
+    let nextProtected = 0;
+
+    // Take the highest-priority eligible pair. Unrelated keys remain sortable,
+    // while pairs containing anchors/aliases retain their original relative order.
+    while (pending.length > 0) {
+      const index = pending.findIndex(
+        (pair) => !protectedSet.has(pair) || pair === protectedPairs[nextProtected]
+      );
+      const [pair] = pending.splice(index, 1);
+      sorted.push(pair);
+      if (protectedSet.has(pair)) {
+        nextProtected++;
+      }
+    }
+    map.items = sorted;
+  }
+
   private static getServiceKeyGroups(config: SorterConfig): string[][] | undefined {
     const groups = config.serviceKeyGroups;
     return groups && groups.length > 0 ? groups : undefined;
@@ -180,7 +222,7 @@ export class DockerComposeSorter {
   private static sortMapByGroups(map: yaml.YAMLMap, groups: string[][]): void {
     const keyOrder = this.createGroupKeyOrder(groups);
 
-    map.items.sort((a, b) => {
+    this.sortPreservingAnchors(map, (a, b) => {
       const keyA = String(a.key);
       const keyB = String(b.key);
 

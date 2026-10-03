@@ -1,8 +1,69 @@
 import assert from "node:assert/strict";
+import * as yaml from "yaml";
 import { DockerComposeSorter, SorterConfig } from "../../core";
 import { cleanConfig, DEFAULT_SERVICE_KEY_GROUPS } from "../helpers";
 
 suite("DockerComposeSorter Test Suite", () => {
+  suite("Anchor ordering regressions", () => {
+    for (const useServiceKeyGroups of [false, true]) {
+      test(`Preserves service-local anchors (groups=${useServiceKeyGroups})`, () => {
+        const input = `services:
+  web:
+    x-env: &env { FOO: service }
+    environment: *env
+    image: nginx
+`;
+        const config = cleanConfig({ useServiceKeyGroups });
+        const result = DockerComposeSorter.sort(input, config);
+        assert.deepStrictEqual(yaml.parse(result), yaml.parse(input));
+        assert.ok(result.indexOf("image: nginx") < result.indexOf("x-env:"));
+        assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+      });
+
+      test(`Preserves shadowed anchor bindings (groups=${useServiceKeyGroups})`, () => {
+        const input = `x-root: &env { FOO: root }
+services:
+  web:
+    x-env: &env { FOO: service }
+    environment: *env
+    image: nginx
+`;
+        const config = cleanConfig({ useServiceKeyGroups });
+        const result = DockerComposeSorter.sort(input, config);
+        assert.deepStrictEqual(yaml.parse(result), yaml.parse(input));
+        assert.strictEqual(yaml.parse(result).services.web.environment.FOO, "service");
+        assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+      });
+    }
+
+    test("Preserves anchors in standard top-level sections", () => {
+      const input = `networks: &shared { default: {} }
+services:
+  web:
+    image: nginx
+    networks: *shared
+`;
+      const result = DockerComposeSorter.sort(input, cleanConfig());
+      assert.deepStrictEqual(yaml.parse(result), yaml.parse(input));
+      assert.strictEqual(DockerComposeSorter.sort(result, cleanConfig()), result);
+    });
+
+    test("Anchor dependencies take precedence over explicit extension-field ordering", () => {
+      const input = `x-base: &base { image: nginx }
+x-child: &child { <<: *base }
+services:
+  web: { <<: *child }
+`;
+      const config = cleanConfig({ topLevelKeyOrder: ["services", "x-child", "x-base"] });
+      const result = DockerComposeSorter.sort(input, config);
+      assert.deepStrictEqual(
+        yaml.parse(result, { merge: true }),
+        yaml.parse(input, { merge: true })
+      );
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+  });
+
   /*
    * ==========================================
    * 1. Sorting Tests
