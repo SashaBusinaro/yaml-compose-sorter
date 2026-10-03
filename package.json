@@ -221,5 +221,10 @@
   },
   "dependencies": {
     "yaml": "^2.9.1"
+  },
+  "overrides": {
+    "@vscode/test-cli": {
+      "mocha": "$mocha"
+    }
   }
 }
