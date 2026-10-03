@@ -1,9 +1,7 @@
 import * as yaml from "yaml";
 import { SorterConfig } from "./types";
-import { DEFAULT_TRANSFORMABLE_LIST_KEYS } from "./constants";
 
 const MERGE_KEY_GROUP_INDEX = -999;
-const TRANSFORMABLE_KEYS_SET = new Set(DEFAULT_TRANSFORMABLE_LIST_KEYS);
 
 export class DockerComposeSorter {
   public static sort(yamlText: string, config: SorterConfig, indent: number = 2): string {
@@ -287,33 +285,81 @@ export class DockerComposeSorter {
   }
 
   private static transformListsToMaps(doc: yaml.Document): void {
-    yaml.visit(doc, {
-      Pair(_, pair) {
-        // Keys can be non-scalar (e.g. merge keys or complex keys): leave those untouched
+    type Context = "compose" | "services" | "service" | "build" | "deploy" | "hook";
+    const visited = new Map<yaml.Node, Set<Context>>();
+    const sequences = new Set<yaml.YAMLSeq>();
+    const resolve = (node: unknown): unknown => (yaml.isAlias(node) ? node.resolve(doc) : node);
+
+    const collect = (source: unknown, context: Context): void => {
+      const node = resolve(source);
+      if (!yaml.isMap(node)) {
+        return;
+      }
+      const contexts = visited.get(node) ?? new Set<Context>();
+      if (contexts.has(context)) {
+        return;
+      }
+      contexts.add(context);
+      visited.set(node, contexts);
+
+      for (const pair of node.items) {
         if (!yaml.isScalar(pair.key) || typeof pair.key.value !== "string") {
-          return undefined;
+          continue;
         }
-
         const key = pair.key.value;
-        // Restrict list-to-map conversion to recognized compose keys
-        if (!TRANSFORMABLE_KEYS_SET.has(key)) {
-          return undefined;
+        const value = resolve(pair.value);
+        if (key === "<<") {
+          // Only fragments actually used in a Compose context are transformed.
+          for (const fragment of yaml.isSeq(value) ? value.items : [value]) {
+            collect(fragment, context);
+          }
+        } else if (context === "compose") {
+          if (key === "services") {
+            collect(value, "services");
+          }
+        } else if (context === "services") {
+          if (!key.startsWith("x-")) {
+            collect(value, "service");
+          }
+        } else {
+          const transformable =
+            (key === "environment" && (context === "service" || context === "hook")) ||
+            (key === "labels" && context !== "hook") ||
+            (key === "extra_hosts" && (context === "service" || context === "build")) ||
+            (key === "args" && context === "build");
+          if (transformable && yaml.isSeq(value)) {
+            sequences.add(value);
+          } else if (context === "service") {
+            if (key === "build" || key === "deploy") {
+              collect(value, key);
+            } else if ((key === "post_start" || key === "pre_stop") && yaml.isSeq(value)) {
+              value.items.forEach((hook) => collect(hook, "hook"));
+            }
+          }
         }
+      }
+    };
 
-        if (yaml.isSeq(pair.value) && DockerComposeSorter.canTransformSeq(pair.value)) {
-          pair.value = DockerComposeSorter.seqToMap(pair.value);
+    if (yaml.isMap(doc.contents)) {
+      collect(doc.contents, "compose");
+    }
+    yaml.visit(doc, {
+      Seq(_, seq) {
+        if (sequences.has(seq) && DockerComposeSorter.canTransformSeq(seq)) {
+          return DockerComposeSorter.seqToMap(seq);
         }
       }
     });
   }
 
   private static canTransformSeq(seq: yaml.YAMLSeq): boolean {
-    if (seq.items.length === 0) {
+    if (seq.items.length === 0 || (seq.tag && seq.tag !== "!override" && seq.tag !== "!reset")) {
       return false;
     }
     const seenKeys = new Set<string>();
     return seq.items.every((item) => {
-      if (!yaml.isScalar(item) || typeof item.value !== "string") {
+      // Splitting an anchored/tagged scalar would change what its aliases mean.
+      if (!yaml.isScalar(item) || typeof item.value !== "string" || item.anchor || item.tag) {
         return false;
       }
       const str = item.value;
@@ -332,7 +378,11 @@ export class DockerComposeSorter {
   }
 
   private static seqToMap(seq: yaml.YAMLSeq): yaml.YAMLMap {
-    const map = new yaml.YAMLMap();
+    const map = new yaml.YAMLMap(seq.schema);
+    map.anchor = seq.anchor;
+    map.tag = seq.tag;
+    map.flow = seq.flow;
+    map.spaceBefore = seq.spaceBefore;
     if (seq.commentBefore) {
       map.commentBefore = seq.commentBefore;
     }
@@ -354,6 +404,7 @@ export class DockerComposeSorter {
         if (item.commentBefore) {
           pair.key!.commentBefore = item.commentBefore;
         }
+        pair.key!.spaceBefore = item.spaceBefore;
 
         map.add(pair);
       }

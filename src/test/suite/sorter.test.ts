@@ -4,6 +4,174 @@ import { DockerComposeSorter, SorterConfig } from "../../core";
 import { cleanConfig, DEFAULT_SERVICE_KEY_GROUPS } from "../helpers";
 
 suite("DockerComposeSorter Test Suite", () => {
+  suite("Compose list conversion regressions", () => {
+    const config = cleanConfig({ transformKeyValueLists: true });
+
+    for (const tag of ["!override", "!reset"]) {
+      test(`Preserves ${tag} on converted Compose lists`, () => {
+        const input = `services:
+  app:
+    environment: ${tag}
+      - FOO=override
+`;
+        const result = DockerComposeSorter.sort(input, config);
+        const doc = yaml.parseDocument(result);
+        const environment = doc.getIn(["services", "app", "environment"], true);
+        assert.ok(yaml.isMap(environment));
+        assert.strictEqual(environment.tag, tag);
+        assert.strictEqual(environment.get("FOO"), "override");
+        assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+      });
+    }
+
+    test("Preserves collection anchors and aliases during conversion", () => {
+      const input = `services:
+  a:
+    environment: &env
+      - FOO=bar
+  b:
+    environment: *env
+`;
+      const result = DockerComposeSorter.sort(input, config);
+      const data = yaml.parse(result);
+      assert.deepStrictEqual(data.services.a.environment, { FOO: "bar" });
+      assert.strictEqual(data.services.a.environment, data.services.b.environment);
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+
+    test("Converts lists referenced from a Compose field via an alias", () => {
+      const input = `x-env: &env [FOO=bar]
+services:
+  app:
+    environment: *env
+`;
+      const result = DockerComposeSorter.sort(input, config);
+      assert.deepStrictEqual(yaml.parse(result).services.app.environment, { FOO: "bar" });
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+
+    test("Leaves anchored list items intact so scalar aliases retain their value", () => {
+      const input = `services:
+  a:
+    environment:
+      - &var FOO=bar
+  b:
+    environment:
+      - *var
+`;
+      const result = DockerComposeSorter.sort(input, config);
+      assert.deepStrictEqual(yaml.parse(result), yaml.parse(input));
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+
+    test("Leaves explicit sequence tags and tagged items untouched", () => {
+      const input = `services:
+  app:
+    environment: !!seq [FOO=bar]
+    labels: [!!str FOO=bar]
+`;
+      const result = DockerComposeSorter.sort(input, config);
+      assert.deepStrictEqual(yaml.parse(result), yaml.parse(input));
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+
+    test("Does not transform arbitrary data in extension fields", () => {
+      const input = `x-custom:
+  environment: [FOO=bar]
+  labels: [KEY=value]
+  args: [--flag=on]
+services:
+  app:
+    image: nginx
+    x-command:
+      args: [--flag=on]
+      labels: [KEY=value]
+    x-hook:
+      environment: [FOO=bar]
+  x-metadata:
+    environment: [FOO=bar]
+`;
+      const result = DockerComposeSorter.sort(input, config);
+      assert.deepStrictEqual(yaml.parse(result), yaml.parse(input));
+    });
+
+    test("Transforms Compose build, deploy, and lifecycle hook lists", () => {
+      const input = `services:
+  app:
+    build:
+      context: .
+      args: [FOO=bar]
+      labels: [KEY=value]
+      extra_hosts: [host=127.0.0.1]
+    deploy:
+      labels: [KEY=value]
+    post_start:
+      - command: echo
+        environment: [FOO=bar]
+    pre_stop:
+      - command: echo
+        environment: [FOO=bar]
+`;
+      const result = DockerComposeSorter.sort(input, config);
+      const app = yaml.parse(result).services.app;
+      assert.deepStrictEqual(app.build.args, { FOO: "bar" });
+      assert.deepStrictEqual(app.build.labels, { KEY: "value" });
+      assert.deepStrictEqual(app.build.extra_hosts, { host: "127.0.0.1" });
+      assert.deepStrictEqual(app.deploy.labels, { KEY: "value" });
+      assert.deepStrictEqual(app.post_start[0].environment, { FOO: "bar" });
+      assert.deepStrictEqual(app.pre_stop[0].environment, { FOO: "bar" });
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+
+    test("Transforms used Compose fragments but preserves unused extensions", () => {
+      const input = `x-unused:
+  environment: [UNUSED=yes]
+x-service: &service
+  environment: [FOO=bar]
+x-build: &build
+  args: [ARG=value]
+services:
+  app:
+    <<: *service
+    build: *build
+`;
+      const result = DockerComposeSorter.sort(input, config);
+      const data = yaml.parse(result, { merge: true });
+      assert.deepStrictEqual(data["x-unused"].environment, ["UNUSED=yes"]);
+      assert.deepStrictEqual(data.services.app.environment, { FOO: "bar" });
+      assert.deepStrictEqual(data.services.app.build.args, { ARG: "value" });
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+
+    test("Recognizes services inherited through a top-level merge", () => {
+      const input = `x-compose: &compose
+  services:
+    app:
+      environment: [FOO=bar]
+<<: *compose
+`;
+      const result = DockerComposeSorter.sort(input, config);
+      assert.deepStrictEqual(yaml.parse(result, { merge: true }).services.app.environment, {
+        FOO: "bar"
+      });
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+
+    test("Preserves blank lines and comments between converted entries", () => {
+      const input = `services:
+  app:
+    environment:
+      - FOO=bar # First
+
+      # Second
+      - BAR=baz
+`;
+      const result = DockerComposeSorter.sort(input, config);
+      assert.ok(result.includes("FOO: bar # First\n\n      # Second\n      BAR: baz"));
+      assert.strictEqual(DockerComposeSorter.sort(result, config), result);
+    });
+  });
+
   suite("Anchor ordering regressions", () => {
     for (const useServiceKeyGroups of [false, true]) {
       test(`Preserves service-local anchors (groups=${useServiceKeyGroups})`, () => {
